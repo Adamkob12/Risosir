@@ -1,0 +1,23 @@
+cargo-features = ["per-package-target"]
+
+[package]
+name = "risosir"
+edition = "2021"
+license.workspace = true
+version.workspace = true
+forced-target = "riscv64gc-unknown-none-elf"
+
+[workspace.package]
+version = "0.1.0"
+license = "MIT/Apache-2.0"
+
+[[bin]]
+name = "risosir"
+path = "src/kernel/src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+
+[workspace]
+members = ["src/kernel"]

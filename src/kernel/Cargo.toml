@@ -1,0 +1,14 @@
+cargo-features = ["per-package-target"]
+
+[package]
+name = "kernel"
+edition = "2021"
+version.workspace = true
+license.workspace = true
+forced-target = "riscv64gc-unknown-none-elf"
+
+[dependencies]
+
+[lib]
+name = "kernel"
+path = "lib.rs"
