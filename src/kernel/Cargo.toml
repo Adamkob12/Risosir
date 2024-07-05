@@ -12,4 +12,3 @@ forced-target = "riscv64gc-unknown-none-elf"
 [lib]
 name = "kernel"
 path = "src/lib.rs"
-test = false

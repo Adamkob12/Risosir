@@ -1,3 +1,6 @@
+[build]
+target = "riscv64gc-unknown-none-elf"
+
 [target.riscv64gc-unknown-none-elf]
 # runner = """
 # qemu-system-riscv64 -machine virt -bios none -m 524M -smp 4 -nographic \
@@ -9,6 +12,5 @@
 runner = """
 qemu-system-riscv64 -machine virt -bios none -m 524M -smp 4 -nographic \
 -serial mon:stdio -global virtio-mmio.force-legacy=false \
--device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
 -kernel
 """
