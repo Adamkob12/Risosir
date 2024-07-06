@@ -3,6 +3,7 @@ use core::arch::asm;
 use crate::start::start;
 
 /// The entry point for the OS, every CPU core starts here.
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe extern "C" fn _entry() -> ! {
     // Initialize the stack
 
