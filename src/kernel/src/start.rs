@@ -1,4 +1,4 @@
-use core::ptr::addr_of;
+use core::{arch::asm, ptr::addr_of};
 
 use crate::{
     arch::{
@@ -8,6 +8,7 @@ use crate::{
                 Medeleg, Mepc, Mhartid, Mideleg, Mie, Mscratch, MstatusMie, MstatusMpp, Mtvec,
                 Pmpaddr0, Pmpcfg0, Sie, SIE_SEIE, SIE_SSIE, SIE_STIE,
             },
+            gpr::Tp,
             mmapped::Mtimecmp,
             AddressOf, ReadFrom, WriteInto,
         },
@@ -50,6 +51,13 @@ pub unsafe fn start() -> ! {
 
     setup_timer_interrupts();
 
+    // Save the hart id in TP because we won't have access to it outside of machine mode
+    let hart_id = Mhartid.read();
+    Tp.write(hart_id);
+
+    asm!("mret");
+
+    // unreachable
     loop {}
 }
 

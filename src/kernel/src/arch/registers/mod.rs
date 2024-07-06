@@ -1,4 +1,5 @@
 pub mod csr;
+pub mod gpr;
 pub mod mmapped;
 
 pub trait ReadFrom {
