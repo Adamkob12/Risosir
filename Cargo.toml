@@ -17,7 +17,11 @@ path = "src/kernel/src/main.rs"
 test = false
 bench = false
 
-[dependencies]
+[workspace.dependencies]
+kernel = { path = "src/kernel" }
 
 [workspace]
 members = ["src/kernel"]
+
+[dependencies]
+kernel = { workspace = true }

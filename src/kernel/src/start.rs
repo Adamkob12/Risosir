@@ -1,5 +1,3 @@
-use core::{arch::asm, ptr::addr_of};
-
 use crate::{
     arch::{
         common::{disable_paging, privilage::PrivLevel},
@@ -9,14 +7,16 @@ use crate::{
                 Pmpaddr0, Pmpcfg0, Sie, SIE_SEIE, SIE_SSIE, SIE_STIE,
             },
             gpr::Tp,
-            mmapped::Mtimecmp,
+            mmapped::{Mtime, Mtimecmp},
             AddressOf, ReadFrom, WriteInto,
         },
     },
     kernelvec::timervec,
     param::{NCPU, STACK_SIZE, TIMER_INTERRUPT_INTERVAL},
     trap::Trap,
+    uart::{init_uart, THR, UART},
 };
+use core::{arch::asm, hint::unreachable_unchecked, ptr::addr_of};
 
 /// The stacks of all the CPU cores combined.
 /// Each CPU core will use a part of the global stack.
@@ -31,34 +31,40 @@ static mut GLOBAL_STACK: GlobalStack = GlobalStack([0; STACK_SIZE * NCPU]);
 pub unsafe fn start() -> ! {
     // Set MPP to Supervisor, so after calling `mret` we'll end up in Supervisor
     MstatusMpp.write(PrivLevel::S);
-    // The function `main` is defined in main.rs, but we don't have access to it so we can't reference it directly.
-    // Fortunately, it must be #[no_mangle], so we can act as though it's defined here.
-    extern "C" {
-        fn main() -> !;
-    }
     // Set the MPEC to point to the main function, after calling `mret`, it will start executing.
     Mepc.write(main as u64);
     // Disabe paging for now
     disable_paging();
     // Delegate exception and interrupt handling to S-mode
-    Medeleg.write(u64::MAX); // TODO: maybe u16::MAX instead
-    Mideleg.write(u64::MAX);
+    Medeleg.write(0xffff); // TODO: maybe u16::MAX instead
+    Mideleg.write(0xffff);
     // Enable Software, External and Timer interrupts
     Sie.write(Sie.read() | SIE_SEIE | SIE_SSIE | SIE_STIE);
     // Configure Physical Memory Protection to give supervisor mode access to all of physical memory.
-    Pmpaddr0.write(u64::MAX); // TODO: maybe 0x3fffffffffffff instead
-    Pmpcfg0.write(u8::MAX as u64);
-
-    setup_timer_interrupts();
+    Pmpaddr0.write(0x3fffffffffffff); // TODO: maybe 0x3fffffffffffff instead
+    Pmpcfg0.write(0xf);
 
     // Save the hart id in TP because we won't have access to it outside of machine mode
     let hart_id = Mhartid.read();
     Tp.write(hart_id);
 
+    // The function `main` is defined in main.rs, but we don't have access to it so we can't reference it directly.
+    // Fortunately, it must be #[no_mangle], so we can act as though it's defined here.
+    extern "C" {
+        fn main() -> !;
+    }
+
+    // if hart_id == 0 {
+    //     unsafe { init_uart() };
+    //     unsafe { UART.lock().write_to_register::<THR>(b'S') };
+    //     unsafe { UART.lock().write_to_register::<THR>(b'S') };
+    // }
+
+    setup_timer_interrupts();
+
     asm!("mret");
 
-    // unreachable
-    loop {}
+    panic!("unreachable");
 }
 
 /// The timer interrupt handler will recieve this data:
@@ -72,9 +78,11 @@ static mut TIMER_INTERRUPT_DATA: [DataToHandleTimerInt; NCPU] = [[0; 5]; NCPU];
 
 /// Set up timer interrupts
 #[allow(unsafe_op_in_unsafe_fn)]
-unsafe fn setup_timer_interrupts() {
+pub unsafe fn setup_timer_interrupts() {
     // Get hart id
     let hart_id = Mhartid.read();
+    // Schedule the next timer interrupt to happen in `TIMER_INTERRUPT_INTERVAL` cycles.
+    Mtimecmp { hart_id }.write(Mtime.read() + TIMER_INTERRUPT_INTERVAL);
     // Set the correct data for the timer interrupt handler
     TIMER_INTERRUPT_DATA[hart_id as usize][3] = Mtimecmp { hart_id }.addr_of() as u64;
     TIMER_INTERRUPT_DATA[hart_id as usize][4] = TIMER_INTERRUPT_INTERVAL;

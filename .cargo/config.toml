@@ -10,7 +10,5 @@ target = "riscv64gc-unknown-none-elf"
 # -kernel
 # """
 runner = """
-qemu-system-riscv64 -machine virt -bios none -m 524M -smp 4 -nographic \
--serial mon:stdio -global virtio-mmio.force-legacy=false \
--kernel
+qemu-system-riscv64 -machine virt -bios none -m 524M -smp 4 -nographic -serial mon:stdio -kernel
 """

@@ -10,7 +10,7 @@ impl ReadFrom for Mtime {
     type Out = u64;
 
     unsafe fn read(&self) -> Self::Out {
-        unsafe { *(MTIME_ADDR as *const u64) }
+        unsafe { (MTIME_ADDR as *const u64).read_volatile() }
     }
 }
 
@@ -24,7 +24,7 @@ pub struct Mtimecmp {
 impl WriteInto for Mtimecmp {
     type In = u64;
     unsafe fn write(&self, val: Self::In) {
-        unsafe { *((MTIMECMP_ADDR + 8 * self.hart_id as usize) as *mut u64) = val };
+        unsafe { ((MTIMECMP_ADDR + 8 * self.hart_id as usize) as *mut u64).write_volatile(val) };
     }
 }
 
