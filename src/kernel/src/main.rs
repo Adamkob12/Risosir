@@ -4,7 +4,7 @@
 use core::sync::atomic::Ordering;
 use core::{panic::PanicInfo, sync::atomic::AtomicBool};
 use kernel::arch::registers::{gpr::Tp, ReadFrom};
-use kernel::uart::{init_uart, THR, UART};
+use kernel::uart::{THR, UART};
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
