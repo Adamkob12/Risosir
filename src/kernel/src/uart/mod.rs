@@ -1,4 +1,4 @@
-use crate::arch::memlayout::UART_BASE_ADDR;
+use crate::{arch::memlayout::UART_BASE_ADDR, Console};
 use spin::Mutex;
 
 /// Uart 16550
@@ -9,7 +9,10 @@ pub struct Uart {
 
 /// Uart IER register, only available when DLAB is off
 const IER: u8 = 1;
-const MCR: u8 = 4;
+const _MCR: u8 = 4;
+/// Uart LSR register for line status
+const LSR: u8 = 5;
+const LSR_THR_EMPTY_BIT: u8 = 1 << 5;
 /// Uart LCR register
 const LCR: u8 = 3;
 /// Uart DLL register, only avaliable when dlab is set
@@ -49,9 +52,35 @@ impl Uart {
     }
 
     pub unsafe fn write_to_register<const REG: u8>(&mut self, val: u8) {
-        break_();
-        unsafe { ((self.base_addr + REG as usize) as *mut u8).write_volatile(val) }
+        ((self.base_addr + REG as usize) as *mut u8).write_volatile(val)
+    }
+
+    pub unsafe fn read_register<const REG: u8>(&mut self) -> u8 {
+        ((self.base_addr + REG as usize) as *mut u8).read_volatile()
+    }
+
+    /// Read any pending data from the console, if the buffer ever becomes full, this function will wait until its free.
+    /// As opposed to [`Self::async_send_pending`] which will send all the pending data from the console untill the uart buffer becomes full -
+    /// then it returns and *only* continues after the uart interrupts and requests more data.
+    pub fn sync_send_pending(&mut self, console: &mut Console) {
+        unsafe {
+            while let Some(char) = console.read_next() {
+                while self.read_register::<LSR>() & LSR_THR_EMPTY_BIT == 0 {}
+                self.write_to_register::<THR>(char as u8);
+            }
+        }
+    }
+
+    /// Will send all the pending data from the console untill the uart buffer becomes full -
+    /// then it returns and *only* continues after the uart interrupts and requests more data.
+    pub fn async_send_pending(&mut self, console: &mut Console) {
+        unsafe {
+            while let Some(char) = console
+                .read_next()
+                .filter(|_| self.read_register::<LSR>() & LSR_THR_EMPTY_BIT == 1)
+            {
+                self.write_to_register::<THR>(char as u8);
+            }
+        }
     }
 }
-
-fn break_() {}

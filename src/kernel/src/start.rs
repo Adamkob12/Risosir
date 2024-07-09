@@ -14,9 +14,8 @@ use crate::{
     kernelvec::timervec,
     param::{NCPU, STACK_SIZE, TIMER_INTERRUPT_INTERVAL},
     trap::Trap,
-    uart::{init_uart, THR, UART},
 };
-use core::{arch::asm, hint::unreachable_unchecked, ptr::addr_of};
+use core::{arch::asm, ptr::addr_of};
 
 /// The stacks of all the CPU cores combined.
 /// Each CPU core will use a part of the global stack.
@@ -40,6 +39,7 @@ pub unsafe fn start() -> ! {
     Mideleg.write(0xffff);
     // Enable Software, External and Timer interrupts
     Sie.write(Sie.read() | SIE_SEIE | SIE_SSIE | SIE_STIE);
+    // Sie.write(Sie.read() | SIE_SEIE | SIE_SSIE);
     // Configure Physical Memory Protection to give supervisor mode access to all of physical memory.
     Pmpaddr0.write(0x3fffffffffffff); // TODO: maybe 0x3fffffffffffff instead
     Pmpcfg0.write(0xf);
@@ -53,12 +53,6 @@ pub unsafe fn start() -> ! {
     extern "C" {
         fn main() -> !;
     }
-
-    // if hart_id == 0 {
-    //     unsafe { init_uart() };
-    //     unsafe { UART.lock().write_to_register::<THR>(b'S') };
-    //     unsafe { UART.lock().write_to_register::<THR>(b'S') };
-    // }
 
     setup_timer_interrupts();
 

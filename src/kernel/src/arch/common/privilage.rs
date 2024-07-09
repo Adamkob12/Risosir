@@ -1,3 +1,4 @@
+#[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(u64)]
 pub enum PrivLevel {
     /// Machine

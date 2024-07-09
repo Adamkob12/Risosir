@@ -5,9 +5,9 @@ use spin::Mutex;
 use crate::param::NDEV;
 
 /// Similar to the Unix [`read syscall`](https://man7.org/linux/man-pages/man2/read.2.html)
-pub type ReadFunc = fn(u64, *mut u8, u64);
+pub type ReadFunc = unsafe fn(usize, *mut u8, usize) -> usize;
 /// Similar to the Unix [`write syscall`](https://man7.org/linux/man-pages/man2/write.2.html)
-pub type WriteFunc = fn(u64, *mut u8, u64);
+pub type WriteFunc = unsafe fn(usize, *mut u8, usize) -> usize;
 
 /// Store the function pointers that read / write from / to devices.
 #[repr(C)]

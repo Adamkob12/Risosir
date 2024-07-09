@@ -1,13 +1,9 @@
 use core::arch::asm;
 
-use crate::uart::{THR, UART};
-
 #[repr(align(4))]
 #[allow(unsafe_op_in_unsafe_fn)]
 #[no_mangle]
 pub unsafe fn timervec() {
-    unsafe { UART.lock().write_to_register::<THR>(b'S') };
-
     asm!("csrrw a0, mscratch, a0");
     // a0 contains the address of [`DataToHandleTimerInt`], with a dedicated 3 places to save the value of registers.
     asm!("sd a1, 0(a0)");
