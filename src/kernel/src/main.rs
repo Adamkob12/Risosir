@@ -1,15 +1,18 @@
 #![no_std]
 #![no_main]
 
+extern crate alloc;
+
 use core::sync::atomic::Ordering;
 use core::{panic::PanicInfo, sync::atomic::AtomicBool};
 use kernel::arch::registers::{gpr::Tp, ReadFrom};
 use kernel::console::init_console;
-use kernel::cprintln;
+use kernel::mem::heap::init_heap;
+use kernel::{cprintln, end_of_kernel_code_address};
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    cprintln!("Encountered Panic: {:#?}", info);
+    cprintln!("Encountered Panic: {:#}", info);
     loop {}
 }
 
@@ -36,4 +39,6 @@ extern "C" fn main() -> ! {
 unsafe fn init_kernel() {
     init_console();
     cprintln!("\nBooting Kernel...");
+    cprintln!("End of kernel code={:#x}", end_of_kernel_code_address());
+    init_heap();
 }
