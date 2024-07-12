@@ -28,7 +28,7 @@ static mut GLOBAL_STACK: GlobalStack = GlobalStack([0; STACK_SIZE * NCPU]);
 
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn start() -> ! {
-    // Set MPP to Supervisor, so after calling `mret` we'll end up in Supervisor
+    // Set Mstatus.MPP to Supervisor, so after calling `mret` we'll end up in Supervisor
     MstatusMpp.write(PrivLevel::S);
     // Set the MPEC to point to the main function, after calling `mret`, it will start executing.
     Mepc.write(main as u64);

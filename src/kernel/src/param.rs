@@ -12,3 +12,10 @@ pub const NCPU: usize = 8;
 
 /// Default interval (in cycles) between incoming timer interrupts.
 pub const TIMER_INTERRUPT_INTERVAL: u64 = 1_000_000;
+
+// Processes
+
+pub type ProcId = u8;
+
+/// The maximum amount of active processes at a time
+pub const NPROC: usize = ProcId::max_value() as usize;

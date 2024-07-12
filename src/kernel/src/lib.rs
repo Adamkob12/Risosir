@@ -14,6 +14,7 @@ pub mod file;
 pub mod kernelvec;
 pub mod mem;
 pub mod param;
+pub mod proc;
 pub mod start;
 pub mod trap;
 pub mod uart;

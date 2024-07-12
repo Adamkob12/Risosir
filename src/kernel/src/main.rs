@@ -3,12 +3,14 @@
 
 extern crate alloc;
 
+use core::arch::asm;
 use core::sync::atomic::Ordering;
 use core::{panic::PanicInfo, sync::atomic::AtomicBool};
 use kernel::arch::registers::{gpr::Tp, ReadFrom};
 use kernel::console::init_console;
-use kernel::mem::heap::init_heap;
-use kernel::{cprintln, end_of_kernel_code_address};
+use kernel::mem::heap::init_kernel_heap;
+use kernel::uart::UART;
+use kernel::{cprint, cprintln, end_of_kernel_code_address};
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
@@ -40,5 +42,14 @@ unsafe fn init_kernel() {
     init_console();
     cprintln!("\nBooting Kernel...");
     cprintln!("End of kernel code={:#x}", end_of_kernel_code_address());
-    init_heap();
+    init_kernel_heap();
+    loop {
+        let c = UART.lock().get_next();
+        if let Some(c) = { c } {
+            cprint!("New: ");
+            cprint!("{}", c);
+        } else {
+            asm!("wfi");
+        }
+    }
 }

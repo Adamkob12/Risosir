@@ -13,6 +13,7 @@ const _MCR: u8 = 4;
 /// Uart LSR register for line status
 const LSR: u8 = 5;
 const LSR_THR_EMPTY_BIT: u8 = 1 << 5;
+const LSR_RHR_EMPTY_BIT: u8 = 1;
 /// Uart LCR register
 const LCR: u8 = 3;
 /// Uart DLL register, only avaliable when dlab is set
@@ -59,13 +60,18 @@ impl Uart {
         ((self.base_addr + REG as usize) as *mut u8).read_volatile()
     }
 
+    pub unsafe fn get_next(&mut self) -> Option<u8> {
+        (self.read_register::<LSR>() & LSR_RHR_EMPTY_BIT == 1)
+            .then_some(self.read_register::<THR>())
+    }
+
     /// Read any pending data from the console, if the buffer ever becomes full, this function will wait until its free.
     /// As opposed to [`Self::async_send_pending`] which will send all the pending data from the console untill the uart buffer becomes full -
     /// then it returns and *only* continues after the uart interrupts and requests more data.
     pub fn sync_send_pending(&mut self, console: &mut Console) {
         unsafe {
             while let Some(char) = console.read_next() {
-                while self.read_register::<LSR>() & LSR_THR_EMPTY_BIT == 0 {}
+                while (self.read_register::<LSR>() & LSR_THR_EMPTY_BIT) == 0 {}
                 self.write_to_register::<THR>(char as u8);
             }
         }
