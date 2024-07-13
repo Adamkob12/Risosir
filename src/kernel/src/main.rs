@@ -1,10 +1,6 @@
 #![no_std]
 #![no_main]
-#![feature(allocator_api)]
 
-extern crate alloc;
-
-use alloc::boxed::Box;
 use core::alloc::Layout;
 use core::sync::atomic::Ordering;
 use core::{panic::PanicInfo, sync::atomic::AtomicBool};

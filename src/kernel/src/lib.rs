@@ -5,8 +5,6 @@
 #![feature(ascii_char)]
 #![feature(ascii_char_variants)]
 
-extern crate alloc;
-
 pub mod arch;
 pub mod console;
 pub mod entry;
