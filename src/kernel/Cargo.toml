@@ -14,3 +14,7 @@ linked_list_allocator = "0.9"
 [lib]
 name = "kernel"
 path = "src/lib.rs"
+
+[features]
+default = ["debug-allocations"]
+debug-allocations = []

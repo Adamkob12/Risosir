@@ -8,7 +8,7 @@ pub struct Uart {
 }
 
 /// Uart IER register, only available when DLAB is off
-const IER: u8 = 1;
+pub const IER: u8 = 1;
 const _MCR: u8 = 4;
 /// Uart LSR register for line status
 const LSR: u8 = 5;

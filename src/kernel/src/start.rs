@@ -4,7 +4,7 @@ use crate::{
         registers::{
             csr::{
                 Medeleg, Mepc, Mhartid, Mideleg, Mie, Mscratch, MstatusMie, MstatusMpp, Mtvec,
-                Pmpaddr0, Pmpcfg0, Sie, SIE_SEIE, SIE_SSIE, SIE_STIE,
+                Pmpaddr0, Pmpcfg0, Satp, Sie, SIE_SEIE, SIE_SSIE, SIE_STIE,
             },
             gpr::Tp,
             mmapped::{Mtime, Mtimecmp},
@@ -13,7 +13,7 @@ use crate::{
     },
     kernelvec::timervec,
     param::{NCPU, STACK_SIZE, TIMER_INTERRUPT_INTERVAL},
-    trap::Trap,
+    trap::Exception,
 };
 use core::{arch::asm, ptr::addr_of};
 
@@ -30,18 +30,18 @@ static mut GLOBAL_STACK: GlobalStack = GlobalStack([0; STACK_SIZE * NCPU]);
 pub unsafe fn start() -> ! {
     // Set Mstatus.MPP to Supervisor, so after calling `mret` we'll end up in Supervisor
     MstatusMpp.write(PrivLevel::S);
-    // Set the MPEC to point to the main function, after calling `mret`, it will start executing.
+    // Set the Mepc to point to the main function, after calling `mret`, it will start executing.
     Mepc.write(main as u64);
     // Disabe paging for now
-    disable_paging();
+    Satp.write(0);
     // Delegate exception and interrupt handling to S-mode
-    Medeleg.write(0xffff); // TODO: maybe u16::MAX instead
+    Medeleg.write(0xffff);
     Mideleg.write(0xffff);
     // Enable Software, External and Timer interrupts
     Sie.write(Sie.read() | SIE_SEIE | SIE_SSIE | SIE_STIE);
     // Sie.write(Sie.read() | SIE_SEIE | SIE_SSIE);
     // Configure Physical Memory Protection to give supervisor mode access to all of physical memory.
-    Pmpaddr0.write(0x3fffffffffffff); // TODO: maybe 0x3fffffffffffff instead
+    Pmpaddr0.write(0x3fffffffffffff);
     Pmpcfg0.write(0xf);
 
     // Save the hart id in TP because we won't have access to it outside of machine mode
@@ -88,5 +88,5 @@ pub unsafe fn setup_timer_interrupts() {
     // Enable machine-mode interrupts
     MstatusMie.write(true);
     // Enable machine-mode timer interrupts
-    Mie.write(Trap::MachineTimerInterrupt.bitmask());
+    Mie.write(Exception::MachineTimerInterrupt.bitmask());
 }

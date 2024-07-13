@@ -58,25 +58,6 @@ impl Console {
     }
 }
 
-/// Console's [`WriteFunc`]
-pub unsafe fn console_write(_: usize, buff: *mut u8, count: usize) -> usize {
-    let mut console = CONSOLE.lock();
-    let written = { console.write_str(unsafe { from_raw_parts(buff as *mut ascii::Char, count) }) };
-    UART.lock().async_send_pending(&mut console);
-    written
-}
-
-/// Console's [`ReadFunc`]
-pub unsafe fn console_read(_: usize, buff: *mut u8, count: usize) -> usize {
-    let mut console = CONSOLE.lock();
-    let mut i = 0;
-    while let Some(c) = console.read_next().filter(|_| i < count) {
-        unsafe { buff.offset(i as isize).write(c as u8) };
-        i += 1;
-    }
-    i
-}
-
 impl core::fmt::Write for Console {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         let ret = s
@@ -85,7 +66,9 @@ impl core::fmt::Write for Console {
             .filter(|written| *written == s.len())
             .map(|_| ())
             .ok_or(core::fmt::Error);
-        UART.lock().sync_send_pending(self);
+        UART.try_lock()
+            .expect("UART can't be locked when writing to console")
+            .sync_send_pending(self);
         ret
     }
 }

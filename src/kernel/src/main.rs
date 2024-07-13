@@ -1,19 +1,31 @@
 #![no_std]
 #![no_main]
+#![feature(allocator_api)]
 
 extern crate alloc;
 
-use core::arch::asm;
+use alloc::boxed::Box;
+use core::alloc::Layout;
 use core::sync::atomic::Ordering;
 use core::{panic::PanicInfo, sync::atomic::AtomicBool};
 use kernel::arch::registers::{gpr::Tp, ReadFrom};
 use kernel::console::init_console;
-use kernel::mem::heap::init_kernel_heap;
-use kernel::uart::UART;
-use kernel::{cprint, cprintln, end_of_kernel_code_address};
+use kernel::mem::init_kernel_allocator;
+use kernel::mem::paging::Frame;
+use kernel::param::{KB, MB, PAGE_SIZE};
+use kernel::uart::{THR, UART};
+use kernel::{cprint, cprintln, end_of_kernel_code_address, CONSOLE};
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
+    unsafe {
+        UART.force_unlock();
+        CONSOLE.force_unlock();
+        UART.lock().write_to_register::<THR>(b'\n');
+        UART.lock().write_to_register::<THR>(b'P');
+        UART.lock().write_to_register::<THR>(b':');
+        UART.lock().write_to_register::<THR>(b' ');
+    };
     cprintln!("Encountered Panic: {:#}", info);
     loop {}
 }
@@ -42,14 +54,5 @@ unsafe fn init_kernel() {
     init_console();
     cprintln!("\nBooting Kernel...");
     cprintln!("End of kernel code={:#x}", end_of_kernel_code_address());
-    init_kernel_heap();
-    loop {
-        let c = UART.lock().get_next();
-        if let Some(c) = { c } {
-            cprint!("New: ");
-            cprint!("{}", c);
-        } else {
-            asm!("wfi");
-        }
-    }
+    init_kernel_allocator();
 }
