@@ -1,7 +1,7 @@
 pub mod paging;
 pub mod virtual_mem;
 
-use crate::{end_of_kernel_data_section, param::RAM_SIZE};
+use crate::{cprintln, end_of_kernel_data_section, param::RAM_SIZE};
 use core::{alloc::Layout, ptr::NonNull};
 use linked_list_allocator::LockedHeap;
 use paging::{garbage_frame, garbage_frames, Frame};
@@ -28,6 +28,16 @@ impl core::ops::Deref for DebugAllocator {
     }
 }
 
+pub unsafe fn alloc_frame_unwrap() -> NonNull<Frame> {
+    let p = ALLOCATOR
+        .lock()
+        .allocate_first_fit(Layout::new::<Frame>())
+        .unwrap()
+        .cast();
+    p.write(garbage_frame());
+    p
+}
+
 pub unsafe fn alloc_frame() -> Option<NonNull<Frame>> {
     ALLOCATOR
         .lock()
@@ -36,6 +46,8 @@ pub unsafe fn alloc_frame() -> Option<NonNull<Frame>> {
         .map(|p| {
             let p = p.cast();
             p.write(garbage_frame());
+            #[cfg(feature = "debug-allocations")]
+            // cprintln!("Allocated Frame at {:#x}", p.as_ptr() as usize);
             p
         })
 }
@@ -48,6 +60,8 @@ pub unsafe fn alloc_frames<const N: usize>() -> Option<NonNull<[Frame; N]>> {
         .map(|p| {
             let p = p.cast();
             p.write(garbage_frames());
+            #[cfg(feature = "debug-allocations")]
+            cprintln!("Allocated a {N} Frames array at {:#x}", p.as_ptr() as usize);
             p
         })
 }

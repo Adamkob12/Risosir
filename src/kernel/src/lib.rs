@@ -1,13 +1,17 @@
-#![no_std]
-#![no_main]
 #![feature(asm_const)]
+#![allow(static_mut_refs)]
 #![feature(fn_align)]
 #![feature(panic_info_message)]
 #![feature(ascii_char)]
 #![feature(ascii_char_variants)]
-#![feature(custom_test_frameworks)]
-#![test_runner(crate::test_runner)]
-#![reexport_test_harness_main = "test_main"]
+#![no_std]
+#![no_main]
+
+pub const TESTS: &[&dyn Test] = &[&trivial_test];
+
+fn trivial_test() {
+    assert_eq!(1, 1);
+}
 
 pub mod arch;
 pub mod console;
@@ -25,14 +29,12 @@ use arch::registers::{gpr::Tp, ReadFrom};
 pub use console::*;
 use core::{
     arch::asm,
-    panic::PanicInfo,
     sync::atomic::{AtomicBool, Ordering},
 };
 use mem::{
     init_kernel_allocator,
     paging::{init_kernel_page_table, set_current_page_table, KERNEL_PAGE_TABLE},
 };
-use uart::UART;
 
 extern "C" {
     fn end();
@@ -50,13 +52,15 @@ pub fn end_of_kernel_code_section() -> usize {
 }
 
 #[panic_handler]
-#[cfg(test)]
-fn panic(info: &PanicInfo) -> ! {
+#[cfg(feature = "test-kernel")]
+fn panic(info: &core::panic::PanicInfo) -> ! {
+    use uart::UART;
+
     unsafe {
         // UART.force_unlock();
         // CONSOLE.force_unlock();
         let mut uart = UART.lock();
-        uart.write_chars(b"TEST FAILED.");
+        uart.write_chars(b"[TEST FAILED]");
         if let Some(msg) = info.message().as_str() {
             uart.write_chars(msg.as_bytes());
         } else {
@@ -90,10 +94,10 @@ pub extern "C" fn test_kernel() -> ! {
 
     if cpuid == 0 {
         unsafe { init_kernel() };
-        #[cfg(test)]
-        test_main();
         // The kernel has officially booted
-        // STARTED.store(true, Ordering::SeqCst);
+        test_runner(TESTS);
+        cprintln!("\n");
+        cprintln!("All Tests Passed.");
     }
     while !STARTED.load(Ordering::SeqCst) {
         // Wait for CPU #0 to set up the kernel properly
@@ -114,9 +118,9 @@ unsafe fn init_kernel() {
     // Set up allocations & paging
     init_kernel_allocator();
     init_kernel_page_table();
+    #[allow(static_mut_refs)]
     set_current_page_table(&KERNEL_PAGE_TABLE);
     panic!("ARHARH");
-    cprintln!("Hi, does paging work?");
 }
 
 pub fn test_runner(tests: &[&dyn Test]) {
@@ -124,9 +128,7 @@ pub fn test_runner(tests: &[&dyn Test]) {
     cprintln!("~~~~~~~~~ Running {} tests ~~~~~~~~~", tests.len());
     cprintln!();
     for test in tests {
-        cprintln!("RUNNING TEST: {}...", test.name());
-        test.run();
-        cprintln!("[ok]");
+        test.execute_test();
     }
     cprintln!();
     cprintln!("~~~~~~~~~ All tests passed ~~~~~~~~~");
@@ -135,6 +137,11 @@ pub fn test_runner(tests: &[&dyn Test]) {
 pub trait Test {
     fn name(&self) -> &'static str;
     fn run(&self);
+    fn execute_test(&self) {
+        cprintln!("RUNNING TEST: {}...", self.name());
+        self.run();
+        cprintln!("[ok]");
+    }
 }
 
 impl<T> Test for T

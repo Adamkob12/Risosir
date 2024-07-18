@@ -13,7 +13,6 @@ use crate::{
     },
     kernelvec::timervec,
     param::{NCPU, STACK_SIZE, TIMER_INTERRUPT_INTERVAL},
-    test_kernel,
     trap::Exception,
 };
 use core::{arch::asm, ptr::addr_of};
@@ -32,10 +31,10 @@ pub unsafe fn start() -> ! {
     // Set Mstatus.MPP to Supervisor, so after calling `mret` we'll end up in Supervisor
     MstatusMpp.write(PrivLevel::S);
     // Set the Mepc to point to the main function, after calling `mret`, it will start executing.
-    #[cfg(not(test))]
+    #[cfg(not(feature = "test-kernel"))]
     Mepc.write(main as u64);
-    #[cfg(test)]
-    Mepc.write(test_kernel as u64);
+    #[cfg(feature = "test-kernel")]
+    Mepc.write(crate::test_kernel as u64);
     // Disabe paging for now
     Satp.write(0);
     // Delegate exception and interrupt handling to S-mode
@@ -45,7 +44,7 @@ pub unsafe fn start() -> ! {
     Sie.write(Sie.read() | SIE_SEIE | SIE_SSIE | SIE_STIE);
     // Sie.write(Sie.read() | SIE_SEIE | SIE_SSIE);
     // Configure Physical Memory Protection to give supervisor mode access to all of physical memory.
-    Pmpaddr0.write(0x3fffffffffffff);
+    Pmpaddr0.write(0xffffffffffffffff);
     Pmpcfg0.write(0xf);
 
     // Save the hart id in TP because we won't have access to it outside of machine mode
@@ -54,6 +53,7 @@ pub unsafe fn start() -> ! {
 
     // The function `main` is defined in main.rs, but we don't have access to it so we can't reference it directly.
     // Fortunately, it must be #[no_mangle], so we can act as though it's defined here.
+    #[allow(dead_code)]
     extern "C" {
         fn main() -> !;
     }

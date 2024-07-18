@@ -25,3 +25,6 @@ members = ["src/kernel"]
 
 [dependencies]
 kernel = { workspace = true }
+
+[features]
+test-kernel = ["kernel/test-kernel"]

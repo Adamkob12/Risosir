@@ -1,3 +1,7 @@
+#![feature(custom_test_frameworks)]
+#![reexport_test_harness_main = "test_main"]
+#![allow(static_mut_refs)]
+#![test_runner(kernel::test_runner)]
 #![no_std]
 #![no_main]
 #![feature(panic_info_message)]
@@ -5,14 +9,17 @@
 use core::arch::asm;
 use core::sync::atomic::Ordering;
 use core::{panic::PanicInfo, sync::atomic::AtomicBool};
+use kernel::arch::registers::csr::Stvec;
+use kernel::arch::registers::WriteInto;
 use kernel::arch::registers::{gpr::Tp, ReadFrom};
 use kernel::console::init_console;
 use kernel::mem::init_kernel_allocator;
 use kernel::mem::paging::{init_kernel_page_table, set_current_page_table, KERNEL_PAGE_TABLE};
 use kernel::uart::UART;
-use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section, CONSOLE};
+use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
 
 #[panic_handler]
+#[cfg(not(feature = "test-kernel"))]
 fn panic(info: &PanicInfo) -> ! {
     unsafe {
         // UART.force_unlock();
@@ -58,7 +65,7 @@ extern "C" fn main() -> ! {
     while !STARTED.load(Ordering::SeqCst) {
         // Wait for CPU #0 to set up the kernel properly
     }
-    cprintln!("Hello from Hart #{}", cpuid,);
+    cprintln!("Hello from Hart #{}", cpuid);
     loop {
         unsafe { asm!("wfi") };
     }
@@ -72,38 +79,9 @@ unsafe fn init_kernel() {
     cprintln!("End of kernel code={:#x}", end_of_kernel_code_section());
     cprintln!("End of kernel data={:#x}", end_of_kernel_data_section());
     // Set up allocations & paging
+    // Stvec.write(s_trapper as u64);
     init_kernel_allocator();
     init_kernel_page_table();
+    cprintln!("{:#p}", &KERNEL_PAGE_TABLE);
     set_current_page_table(&KERNEL_PAGE_TABLE);
-    panic!("ARHARH");
-    cprintln!("Hi, does paging work?");
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
 }

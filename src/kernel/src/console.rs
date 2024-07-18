@@ -1,5 +1,5 @@
 use crate::uart::{init_uart, UART};
-use core::{ascii, slice::from_raw_parts};
+use core::ascii;
 use spin::Mutex;
 
 pub const CONSOLE_DEV_ID: usize = 1;

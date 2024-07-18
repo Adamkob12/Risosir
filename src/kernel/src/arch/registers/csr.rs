@@ -46,10 +46,6 @@ impl_csr_reg_rw!(Mtvec, u64, "mtvec");
 pub struct Mie;
 impl_csr_reg_rw!(Mie, u64, "mie");
 
-/// CSR register that contains information about paging.
-pub struct Satp;
-impl_csr_reg_rw!(Satp, u64, "satp");
-
 /// CSR register that stores information about which exceptions should be delegated to S-mode.
 pub struct Medeleg;
 impl_csr_reg_rw!(Medeleg, u64, "medeleg");
@@ -57,6 +53,30 @@ impl_csr_reg_rw!(Medeleg, u64, "medeleg");
 /// CSR register that stores information about which interrupts should be delegated to S-mode.
 pub struct Mideleg;
 impl_csr_reg_rw!(Mideleg, u64, "mideleg");
+
+/// CSR register that contains the exception sepcific info on trap
+pub struct Mtval;
+impl_csr_reg_rw!(Mtval, u64, "mtval");
+
+/// CSR register that contains information about paging.
+pub struct Satp;
+impl_csr_reg_rw!(Satp, u64, "satp");
+
+/// CSR register that contains the cause of the exception
+pub struct Scause;
+impl_csr_reg_rw!(Scause, u64, "scause");
+
+/// CSR register that contains the exception sepcific info on trap
+pub struct Stval;
+impl_csr_reg_rw!(Stval, u64, "stval");
+
+/// CSR register that contains the trap handler address
+pub struct Stvec;
+impl_csr_reg_rw!(Stvec, u64, "stvec");
+
+/// CSR register that contains the cause of the exception
+pub struct Mcause;
+impl_csr_reg_rw!(Mcause, u64, "mcause");
 
 /// CSR register that stores interrupt enable bits (interrupt `i` will not be accepted unless Sie[i] is on)
 pub struct Sie;

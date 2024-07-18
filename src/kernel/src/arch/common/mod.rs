@@ -1,8 +1,6 @@
 use core::arch::asm;
 
-use crate::mem::paging::PageTable;
 
-use super::registers::{csr::Satp, WriteInto};
 
 pub mod privilage;
 

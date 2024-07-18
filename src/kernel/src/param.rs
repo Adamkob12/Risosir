@@ -28,6 +28,6 @@ pub type ProcId = u8;
 /// The maximum amount of active processes at a time
 pub const NPROC: usize = ProcId::max_value() as usize;
 
-pub const RAM_SIZE: usize = 30 * MB;
+pub const RAM_SIZE: usize = 100 * MB;
 
 pub const RAM_END: usize = KERNEL_BASE_ADDR + RAM_SIZE;

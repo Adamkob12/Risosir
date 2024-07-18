@@ -18,3 +18,4 @@ path = "src/lib.rs"
 [features]
 default = ["debug-allocations"]
 debug-allocations = []
+test-kernel = []

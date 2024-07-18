@@ -7,6 +7,7 @@ pub enum ProcStatus {
     Running,
 }
 
+#[allow(unused)]
 #[derive(Clone, Copy)]
 pub struct Process {
     name: &'static str,

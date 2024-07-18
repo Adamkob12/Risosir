@@ -25,3 +25,28 @@ pub const UART_BASE_ADDR: usize = 0x1000_0000;
 
 /// The start of the kernel source code in RAM
 pub const KERNEL_BASE_ADDR: usize = 0x8000_0000;
+
+// VIRTIO
+
+// virtio mmio interface
+pub const VIRTIO0: usize = 0x1000_1000;
+pub const VIRTIO0_IRQ: u32 = 1;
+
+// PLIC
+
+// qemu puts platform-level interrupt controller (PLIC) here.
+pub const PLIC: usize = 0x0C00_0000;
+pub const PLIC_PRIORITY: usize = PLIC;
+pub const PLIC_PENDING: usize = PLIC + 0x1000;
+#[allow(non_snake_case)]
+pub const fn PLIC_SENABLE(hart: usize) -> usize {
+    PLIC + 0x2080 + hart * 0x100
+}
+#[allow(non_snake_case)]
+pub const fn PLIC_SPRIORITY(hart: usize) -> usize {
+    PLIC + 0x201000 + hart * 0x2000
+}
+#[allow(non_snake_case)]
+pub const fn PLIC_SCLAIM(hart: usize) -> usize {
+    PLIC + 0x201004 + hart * 0x2000
+}

@@ -8,19 +8,21 @@ pub(super) const PAGE_TABLE_ENTRIES: usize =
     const { PAGE_SIZE / core::mem::size_of::<PageTableEntry>() };
 
 #[repr(transparent)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct PTEFlags(u64);
 
 /// As per Figure 60. in the RISC-V manual II
+#[derive(Clone, Copy, Debug)]
 #[repr(transparent)]
 pub struct VirtAddr(u64);
 
 /// As per Figure 61. in the RISC-V manual II
+#[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(transparent)]
 pub struct PhysAddr(u64);
 
 /// As per Figure 62. in the RISC-V manual II
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[repr(transparent)]
 pub struct PageTableEntry(u64);
 
@@ -38,8 +40,8 @@ impl VirtAddr {
     const TRAIL_MASK: u64 =
         0b1111_1111_1111_1111_1111_1111_1000_0000_0000_0000_0000_0000_0000_0000_0000_0000;
 
-    pub fn from_raw(addr: usize) -> Self {
-        Self(addr as u64)
+    pub fn from_raw(addr: u64) -> Self {
+        Self(addr)
     }
 
     /// The offset (address inside the page)
@@ -50,24 +52,24 @@ impl VirtAddr {
     /// (Virtual) Page Number 0
     /// return range: [0, 2^9 - 1]
     pub fn vpn0(&self) -> u64 {
-        self.0 & Self::VPN0_MASK >> 12
+        (self.0 & Self::VPN0_MASK) >> 12
     }
 
     /// (Virtual) Page Number 1 (index in L2 table)
     /// return range: [0, 2^9 - 1]
     pub fn vpn1(&self) -> u64 {
-        self.0 & Self::VPN1_MASK >> (12 + 9)
+        (self.0 & Self::VPN1_MASK) >> (12 + 9)
     }
 
     /// (Virtual) Page Number 2 (index in L3 table)
     /// return range: [0, 2^9 - 1]
     pub fn vpn2(&self) -> u64 {
-        self.0 & Self::VPN2_MASK >> (12 + 9 + 9)
+        (self.0 & Self::VPN2_MASK) >> (12 + 9 + 9)
     }
 
     /// Index in L{x} page table
     /// return range: [0, 2^9 - 1]
-    pub fn pte(&self, level: PageTableLevel) -> u64 {
+    pub fn vpn(&self, level: PageTableLevel) -> u64 {
         match level {
             PageTableLevel::L2 => self.vpn2(),
             PageTableLevel::L1 => self.vpn1(),
@@ -81,6 +83,14 @@ impl VirtAddr {
         // Make sure the last 26 bits are all the same
         last_26_bits == (Self::TRAIL_MASK | Self::LAST_BIT_MASK) || last_26_bits == 0
     }
+
+    pub fn as_u64(&self) -> u64 {
+        self.0
+    }
+
+    pub fn round_down(&mut self) {
+        self.0 &= !Self::OFFSET_MASK
+    }
 }
 
 impl PhysAddr {
@@ -93,8 +103,8 @@ impl PhysAddr {
     const PPN2_MASK: u64 =
         0b0000_0000_1111_1111_1111_1111_1111_1111_1100_0000_0000_0000_0000_0000_0000_0000;
 
-    pub fn from_raw(addr: usize) -> Self {
-        Self(addr as u64)
+    pub fn from_raw(addr: u64) -> Self {
+        Self(addr)
     }
 
     /// The offset (address inside the page)
@@ -102,24 +112,17 @@ impl PhysAddr {
         self.0 & Self::OFFSET_MASK
     }
 
-    /// (Physical) Page Number 0
-    pub fn ppn0(&self) -> u64 {
-        self.0 & Self::PPN0_MASK
-    }
-
-    /// (Physical) Page Number 1
-    pub fn ppn1(&self) -> u64 {
-        self.0 & Self::PPN1_MASK
-    }
-
-    /// (Physical) Page Number 2
-    pub fn ppn2(&self) -> u64 {
-        self.0 & Self::PPN2_MASK
-    }
-
     /// The address of the frame
     pub fn frame_adrr(&self) -> u64 {
         self.0 & (Self::PPN0_MASK | Self::PPN1_MASK | Self::PPN2_MASK)
+    }
+
+    pub fn as_u64(&self) -> u64 {
+        self.0
+    }
+
+    pub fn round_down(&mut self) {
+        self.0 &= !Self::OFFSET_MASK
     }
 }
 
@@ -143,8 +146,29 @@ impl PTEFlags {
     pub fn executable(self) -> Self {
         PTEFlags(self.0 | PageTableEntry::X_FLAG_MASK)
     }
+
+    pub fn is_valid(&self) -> bool {
+        (self.0 & PageTableEntry::V_FLAG_MASK) > 0
+    }
+
+    pub fn is_redirect(&self) -> bool {
+        !self.is_readable() && !self.is_writable() && !self.is_executable()
+    }
+
+    pub fn is_readable(&self) -> bool {
+        (self.0 & PageTableEntry::R_FLAG_MASK) > 0
+    }
+
+    pub fn is_writable(&self) -> bool {
+        (self.0 & PageTableEntry::W_FLAG_MASK) > 0
+    }
+
+    pub fn is_executable(&self) -> bool {
+        (self.0 & PageTableEntry::X_FLAG_MASK) > 0
+    }
 }
 
+#[allow(unused)]
 impl PageTableEntry {
     /// Is the entry valid?
     const V_FLAG_MASK: u64 = 1 << 0;
@@ -175,8 +199,8 @@ impl PageTableEntry {
         PageTableEntry(0)
     }
 
-    pub fn new(ppn: NonNull<Frame>, flags: PTEFlags) -> Self {
-        Self(ppn.as_ptr() as u64 | flags.0)
+    pub fn new(frame: NonNull<Frame>, flags: PTEFlags) -> Self {
+        Self(((frame.as_ptr() as u64 >> 12) << 10) | flags.0)
     }
 
     pub const fn is_valid(&self) -> bool {
@@ -202,11 +226,15 @@ impl PageTableEntry {
 
     /// The frame addr, aligned to 4096 bytes
     pub fn frame_addr(&self) -> u64 {
-        self.0 & (Self::PPN0_MASK | Self::PPN1_MASK | Self::PPN2_MASK)
+        // self.0 & (Self::PPN0_MASK | Self::PPN1_MASK | Self::PPN2_MASK)
+        ((self.0 >> 10) << 12)
     }
 
-    /// The combined PPNs
-    pub fn ppn(&self) -> u64 {
-        self.frame_addr() >> 12
+    pub fn set(&mut self, frame_addr: u64, flags: PTEFlags) {
+        self.0 = ((frame_addr >> 12) << 10) | flags.0;
+    }
+
+    pub fn as_u64(&self) -> u64 {
+        self.0
     }
 }
