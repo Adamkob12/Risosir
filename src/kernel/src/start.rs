@@ -1,6 +1,6 @@
 use crate::{
     arch::{
-        common::{disable_paging, privilage::PrivLevel},
+        common::privilage::PrivLevel,
         registers::{
             csr::{
                 Medeleg, Mepc, Mhartid, Mideleg, Mie, Mscratch, MstatusMie, MstatusMpp, Mtvec,
@@ -13,6 +13,7 @@ use crate::{
     },
     kernelvec::timervec,
     param::{NCPU, STACK_SIZE, TIMER_INTERRUPT_INTERVAL},
+    test_kernel,
     trap::Exception,
 };
 use core::{arch::asm, ptr::addr_of};
@@ -31,7 +32,10 @@ pub unsafe fn start() -> ! {
     // Set Mstatus.MPP to Supervisor, so after calling `mret` we'll end up in Supervisor
     MstatusMpp.write(PrivLevel::S);
     // Set the Mepc to point to the main function, after calling `mret`, it will start executing.
+    #[cfg(not(test))]
     Mepc.write(main as u64);
+    #[cfg(test)]
+    Mepc.write(test_kernel as u64);
     // Disabe paging for now
     Satp.write(0);
     // Delegate exception and interrupt handling to S-mode

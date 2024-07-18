@@ -4,7 +4,7 @@ use spin::Mutex;
 
 pub const CONSOLE_DEV_ID: usize = 1;
 type ConsolePtr = u16;
-const CONSOLE_BUFF_LEN: usize = ConsolePtr::MAX as usize;
+const CONSOLE_BUFF_LEN: usize = ConsolePtr::MAX as usize + 1;
 
 pub struct Console {
     buf: [ascii::Char; CONSOLE_BUFF_LEN],
@@ -66,9 +66,7 @@ impl core::fmt::Write for Console {
             .filter(|written| *written == s.len())
             .map(|_| ())
             .ok_or(core::fmt::Error);
-        UART.try_lock()
-            .expect("UART can't be locked when writing to console")
-            .sync_send_pending(self);
+        UART.lock().sync_send_pending(self);
         ret
     }
 }
@@ -88,5 +86,8 @@ macro_rules! cprintln {
 pub fn _print(args: core::fmt::Arguments) {
     use core::fmt::Write;
 
-    CONSOLE.lock().write_fmt(args).unwrap();
+    CONSOLE
+        .lock()
+        .write_fmt(args)
+        .expect("Couldn't write to console");
 }

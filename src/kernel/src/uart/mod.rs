@@ -56,6 +56,16 @@ impl Uart {
         ((self.base_addr + REG as usize) as *mut u8).write_volatile(val)
     }
 
+    pub unsafe fn put_char(&mut self, char: u8) {
+        self.write_to_register::<THR>(char)
+    }
+
+    pub unsafe fn write_chars(&mut self, chars: &[u8]) {
+        for char in chars {
+            self.put_char(*char)
+        }
+    }
+
     pub unsafe fn read_register<const REG: u8>(&mut self) -> u8 {
         ((self.base_addr + REG as usize) as *mut u8).read_volatile()
     }

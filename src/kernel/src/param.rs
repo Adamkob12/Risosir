@@ -1,3 +1,5 @@
+use crate::arch::memlayout::KERNEL_BASE_ADDR;
+
 pub const PAGE_SIZE: usize = 4096;
 pub const PAGES_PER_STACK: usize = 10;
 pub const STACK_SIZE: usize = PAGE_SIZE * PAGES_PER_STACK;
@@ -26,4 +28,6 @@ pub type ProcId = u8;
 /// The maximum amount of active processes at a time
 pub const NPROC: usize = ProcId::max_value() as usize;
 
-pub const RAM_SIZE: usize = 512 * MB;
+pub const RAM_SIZE: usize = 30 * MB;
+
+pub const RAM_END: usize = KERNEL_BASE_ADDR + RAM_SIZE;

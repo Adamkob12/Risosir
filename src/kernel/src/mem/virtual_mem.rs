@@ -1,7 +1,15 @@
+use core::ptr::NonNull;
+
 use crate::param::PAGE_SIZE;
+
+use super::paging::{Frame, PageTableLevel};
 
 pub(super) const PAGE_TABLE_ENTRIES: usize =
     const { PAGE_SIZE / core::mem::size_of::<PageTableEntry>() };
+
+#[repr(transparent)]
+#[derive(Clone, Copy)]
+pub struct PTEFlags(u64);
 
 /// As per Figure 60. in the RISC-V manual II
 #[repr(transparent)]
@@ -30,24 +38,41 @@ impl VirtAddr {
     const TRAIL_MASK: u64 =
         0b1111_1111_1111_1111_1111_1111_1000_0000_0000_0000_0000_0000_0000_0000_0000_0000;
 
+    pub fn from_raw(addr: usize) -> Self {
+        Self(addr as u64)
+    }
+
     /// The offset (address inside the page)
     pub fn offset(&self) -> u64 {
         self.0 & Self::OFFSET_MASK
     }
 
     /// (Virtual) Page Number 0
+    /// return range: [0, 2^9 - 1]
     pub fn vpn0(&self) -> u64 {
-        self.0 & Self::VPN0_MASK
+        self.0 & Self::VPN0_MASK >> 12
     }
 
-    /// (Virtual) Page Number 1
+    /// (Virtual) Page Number 1 (index in L2 table)
+    /// return range: [0, 2^9 - 1]
     pub fn vpn1(&self) -> u64 {
-        self.0 & Self::VPN1_MASK
+        self.0 & Self::VPN1_MASK >> (12 + 9)
     }
 
-    /// (Virtual) Page Number 2
+    /// (Virtual) Page Number 2 (index in L3 table)
+    /// return range: [0, 2^9 - 1]
     pub fn vpn2(&self) -> u64 {
-        self.0 & Self::VPN2_MASK
+        self.0 & Self::VPN2_MASK >> (12 + 9 + 9)
+    }
+
+    /// Index in L{x} page table
+    /// return range: [0, 2^9 - 1]
+    pub fn pte(&self, level: PageTableLevel) -> u64 {
+        match level {
+            PageTableLevel::L2 => self.vpn2(),
+            PageTableLevel::L1 => self.vpn1(),
+            PageTableLevel::L0 => self.vpn0(),
+        }
     }
 
     /// Assert that the last 26 bits are the same, just as described in the spec
@@ -68,6 +93,10 @@ impl PhysAddr {
     const PPN2_MASK: u64 =
         0b0000_0000_1111_1111_1111_1111_1111_1111_1100_0000_0000_0000_0000_0000_0000_0000;
 
+    pub fn from_raw(addr: usize) -> Self {
+        Self(addr as u64)
+    }
+
     /// The offset (address inside the page)
     pub fn offset(&self) -> u64 {
         self.0 & Self::OFFSET_MASK
@@ -84,8 +113,35 @@ impl PhysAddr {
     }
 
     /// (Physical) Page Number 2
-    pub fn vpn2(&self) -> u64 {
+    pub fn ppn2(&self) -> u64 {
         self.0 & Self::PPN2_MASK
+    }
+
+    /// The address of the frame
+    pub fn frame_adrr(&self) -> u64 {
+        self.0 & (Self::PPN0_MASK | Self::PPN1_MASK | Self::PPN2_MASK)
+    }
+}
+
+impl PTEFlags {
+    pub fn valid() -> Self {
+        PTEFlags(PageTableEntry::V_FLAG_MASK)
+    }
+
+    pub fn redirect() -> Self {
+        PTEFlags(PageTableEntry::V_FLAG_MASK)
+    }
+
+    pub fn readable(self) -> Self {
+        PTEFlags(self.0 | PageTableEntry::R_FLAG_MASK)
+    }
+
+    pub fn writable(self) -> Self {
+        PTEFlags(self.0 | PageTableEntry::W_FLAG_MASK)
+    }
+
+    pub fn executable(self) -> Self {
+        PTEFlags(self.0 | PageTableEntry::X_FLAG_MASK)
     }
 }
 
@@ -117,5 +173,40 @@ impl PageTableEntry {
 
     pub const fn new_invalid() -> Self {
         PageTableEntry(0)
+    }
+
+    pub fn new(ppn: NonNull<Frame>, flags: PTEFlags) -> Self {
+        Self(ppn.as_ptr() as u64 | flags.0)
+    }
+
+    pub const fn is_valid(&self) -> bool {
+        (self.0 & Self::V_FLAG_MASK) > 0
+    }
+
+    pub const fn is_readable(&self) -> bool {
+        (self.0 & Self::R_FLAG_MASK) > 0
+    }
+
+    pub const fn is_writable(&self) -> bool {
+        (self.0 & Self::W_FLAG_MASK) > 0
+    }
+
+    pub const fn is_executable(&self) -> bool {
+        (self.0 & Self::X_FLAG_MASK) > 0
+    }
+
+    /// Is this page entry a redirect to another page table
+    pub const fn is_redirect(&self) -> bool {
+        !self.is_readable() && !self.is_executable() && !self.is_writable()
+    }
+
+    /// The frame addr, aligned to 4096 bytes
+    pub fn frame_addr(&self) -> u64 {
+        self.0 & (Self::PPN0_MASK | Self::PPN1_MASK | Self::PPN2_MASK)
+    }
+
+    /// The combined PPNs
+    pub fn ppn(&self) -> u64 {
+        self.frame_addr() >> 12
     }
 }

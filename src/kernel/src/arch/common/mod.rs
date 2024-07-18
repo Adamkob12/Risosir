@@ -1,7 +1,12 @@
+use core::arch::asm;
+
+use crate::mem::paging::PageTable;
+
 use super::registers::{csr::Satp, WriteInto};
 
 pub mod privilage;
 
-pub unsafe fn disable_paging() {
-    unsafe { Satp.write(0) };
+/// Call "Sfence.vma" instruction (often used to make sure updating the satp goes smoothly)
+pub unsafe fn sfence_vma() {
+    asm!("sfence.vma zero, zero");
 }
