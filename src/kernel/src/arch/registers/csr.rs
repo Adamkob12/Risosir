@@ -81,12 +81,6 @@ impl_csr_reg_rw!(Mcause, u64, "mcause");
 /// CSR register that stores interrupt enable bits (interrupt `i` will not be accepted unless Sie[i] is on)
 pub struct Sie;
 impl_csr_reg_rw!(Sie, u64, "sie");
-/// Corresponds to External Interrupts bit in [`SIE`].
-pub const SIE_SEIE: u64 = 1 << 9;
-/// Corresponds to Timer Interrupts bit in [`SIE`].
-pub const SIE_STIE: u64 = 1 << 5;
-/// Corresponds to Software Interrupts bit in [`SIE`].
-pub const SIE_SSIE: u64 = 1 << 1;
 
 /// CSR register that stores information on pending interrupts.
 pub struct Sip;

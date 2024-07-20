@@ -4,7 +4,7 @@ use crate::{
         registers::{
             csr::{
                 Medeleg, Mepc, Mhartid, Mideleg, Mie, Mscratch, MstatusMie, MstatusMpp, Mtvec,
-                Pmpaddr0, Pmpcfg0, Satp, Sie, SIE_SEIE, SIE_SSIE, SIE_STIE,
+                Pmpaddr0, Pmpcfg0, Satp, Sie,
             },
             gpr::Tp,
             mmapped::{Mtime, Mtimecmp},
@@ -13,7 +13,7 @@ use crate::{
     },
     kernelvec::timervec,
     param::{NCPU, STACK_SIZE, TIMER_INTERRUPT_INTERVAL},
-    trap::Exception,
+    trap::{MachineInterrupt, SupervisorInterrupt},
 };
 use core::{arch::asm, ptr::addr_of};
 
@@ -40,8 +40,13 @@ pub unsafe fn start() -> ! {
     // Delegate exception and interrupt handling to S-mode
     Medeleg.write(0xffff);
     Mideleg.write(0xffff);
-    // Enable Software, External and Timer interrupts
-    Sie.write(Sie.read() | SIE_SEIE | SIE_SSIE | SIE_STIE);
+    // Enable S-mode software, external and timer interrupts
+    Sie.write(
+        Sie.read()
+            | SupervisorInterrupt::External.bitmask()
+            | SupervisorInterrupt::Software.bitmask()
+            | SupervisorInterrupt::Timer.bitmask(),
+    );
     // Sie.write(Sie.read() | SIE_SEIE | SIE_SSIE);
     // Configure Physical Memory Protection to give supervisor mode access to all of physical memory.
     Pmpaddr0.write(0xffffffffffffffff);
@@ -92,5 +97,5 @@ pub unsafe fn setup_timer_interrupts() {
     // Enable machine-mode interrupts
     MstatusMie.write(true);
     // Enable machine-mode timer interrupts
-    Mie.write(Exception::MachineTimerInterrupt.bitmask());
+    Mie.write(MachineInterrupt::Timer.bitmask());
 }
