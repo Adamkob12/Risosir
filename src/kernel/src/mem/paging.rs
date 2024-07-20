@@ -122,7 +122,6 @@ pub unsafe fn init_kernel_page_table() {
         PageTableLevel::L2,
     );
 
-    // loop {}
     #[cfg(feature = "debug-allocations")]
     cprintln!("Mapping boot ROM");
     // Map boot ROM
@@ -136,7 +135,7 @@ pub unsafe fn init_kernel_page_table() {
     #[cfg(feature = "debug-allocations")]
     cprintln!("Mapping Entire RAM");
     // Map the entire RAM 1 to 1 for the kernel
-    for addr in (end_of_kernel_data_section()..(KERNEL_BASE_ADDR + RAM_SIZE / 10 - 20 * PAGE_SIZE))
+    for addr in (end_of_kernel_data_section()..(KERNEL_BASE_ADDR + RAM_SIZE - 20 * PAGE_SIZE))
         .step_by(PAGE_SIZE)
     {
         KERNEL_PAGE_TABLE.strong_map(
@@ -146,8 +145,6 @@ pub unsafe fn init_kernel_page_table() {
             PageTableLevel::L2,
         );
     }
-
-    // KERNEL_PAGE_TABLE.debug("\t", 0);
 }
 
 impl PageTableLevel {

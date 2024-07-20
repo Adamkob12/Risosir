@@ -13,6 +13,8 @@ fn trivial_test() {
     assert_eq!(1, 1);
 }
 
+extern crate alloc;
+
 pub mod arch;
 pub mod console;
 pub mod entry;
@@ -35,6 +37,7 @@ use mem::{
     init_kernel_allocator,
     paging::{init_kernel_page_table, set_current_page_table, KERNEL_PAGE_TABLE},
 };
+use proc::init_procs;
 
 extern "C" {
     fn end();
@@ -115,12 +118,10 @@ unsafe fn init_kernel() {
     cprintln!("\nBooting Kernel...");
     cprintln!("End of kernel code={:#x}", end_of_kernel_code_section());
     cprintln!("End of kernel data={:#x}", end_of_kernel_data_section());
-    // Set up allocations & paging
     init_kernel_allocator();
     init_kernel_page_table();
-    #[allow(static_mut_refs)]
     set_current_page_table(&KERNEL_PAGE_TABLE);
-    panic!("ARHARH");
+    init_procs();
 }
 
 pub fn test_runner(tests: &[&dyn Test]) {

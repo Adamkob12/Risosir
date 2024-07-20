@@ -1,15 +1,17 @@
 pub mod paging;
 pub mod virtual_mem;
 
-use crate::{cprintln, end_of_kernel_data_section, param::RAM_SIZE};
+use crate::{end_of_kernel_data_section, param::RAM_SIZE};
 use core::{alloc::Layout, ptr::NonNull};
 use linked_list_allocator::LockedHeap;
 use paging::{garbage_frame, garbage_frames, Frame};
 
 #[cfg(not(feature = "debug-allocations"))]
+#[global_allocator]
 pub static mut ALLOCATOR: LockedHeap = LockedHeap::empty();
 
 #[cfg(feature = "debug-allocations")]
+#[global_allocator]
 pub static mut ALLOCATOR: DebugAllocator = DebugAllocator(LockedHeap::empty());
 
 pub unsafe fn init_kernel_allocator() {
@@ -19,8 +21,10 @@ pub unsafe fn init_kernel_allocator() {
 }
 
 #[repr(transparent)]
+#[cfg(feature = "debug-allocations")]
 pub struct DebugAllocator(LockedHeap);
 
+#[cfg(feature = "debug-allocations")]
 impl core::ops::Deref for DebugAllocator {
     type Target = LockedHeap;
     fn deref(&self) -> &Self::Target {
@@ -47,7 +51,9 @@ pub unsafe fn alloc_frame() -> Option<NonNull<Frame>> {
             let p = p.cast();
             p.write(garbage_frame());
             #[cfg(feature = "debug-allocations")]
-            // cprintln!("Allocated Frame at {:#x}", p.as_ptr() as usize);
+            {
+                // crate::cprintln!("Allocated Frame at {:#x}", p.as_ptr() as usize);
+            }
             p
         })
 }
@@ -61,7 +67,23 @@ pub unsafe fn alloc_frames<const N: usize>() -> Option<NonNull<[Frame; N]>> {
             let p = p.cast();
             p.write(garbage_frames());
             #[cfg(feature = "debug-allocations")]
-            cprintln!("Allocated a {N} Frames array at {:#x}", p.as_ptr() as usize);
+            crate::cprintln!("Allocated a {N} Frames array at {:#x}", p.as_ptr() as usize);
             p
         })
+}
+
+#[cfg(feature = "debug-allocations")]
+unsafe impl core::alloc::GlobalAlloc for DebugAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        let p = self.0.alloc(layout);
+        cprintln!("Allocated: {:#?}", layout);
+        cprintln!("At address: {:#p}", p);
+        p
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        self.0.dealloc(ptr, layout);
+        cprintln!("Deallocated: {:#?}", layout);
+        cprintln!("At address: {:#p}", ptr);
+    }
 }
