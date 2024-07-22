@@ -1,7 +1,18 @@
 pub mod exception;
 pub mod interrupt;
 
-use crate::{arch::registers::WriteInto, cprintln};
+use crate::{
+    arch::{
+        common::privilage::PrivLevel,
+        memlayout::{UART_IRQ, VIRTIO0_IRQ},
+        registers::{gpr::Tp, WriteInto},
+    },
+    cprintln,
+    keyboard::{self, KEYBOARD},
+    plic::{plic_claim, plic_complete},
+    uart::{self, UART},
+    CONSOLE,
+};
 use core::arch::asm;
 pub use exception::*;
 pub use interrupt::*;
@@ -10,22 +21,55 @@ pub use interrupt::*;
 pub unsafe extern "C" fn kerneltrap() {
     use crate::arch::registers::csr::*;
     use crate::arch::registers::ReadFrom;
+    let hart_id = Tp.read();
+    let priv_lvl = PrivLevel::S;
+    let mut uart = UART.lock();
+    let mut console = CONSOLE.lock();
+    let mut keyboard = KEYBOARD.lock();
 
     let scause = Scause.read();
     if (scause & (1 << 63)) > 0 {
         // It's an interrupt
+        if (scause & 0xff) == 9 {
+            // PLIC external interrupt
+            if let Some(plic_dev_id) = plic_claim(hart_id, priv_lvl) {
+                match plic_dev_id {
+                    UART_IRQ => uart.interrupt(&mut *console, &mut *keyboard),
+                    // UART_IRQ => {}
+                    VIRTIO0_IRQ => {}
+                    id => panic!("PLIC interrupt for unrecognized devive: {id}"),
+                }
+                plic_complete(hart_id, priv_lvl, plic_dev_id);
+            }
+        }
+        if (scause & 0xff) == 1 {
+            // cprintln!("Hi");
+            Sip.write(Sip.read() & !2);
+            // Software Interrupt (came from M-mode timer)
+            // todo!("software interrupts")
+        }
     } else {
         // It's an exception
-        if (scause & 0xff) == 8 {
-            // Syscall from U-mode
-        } else {
-            panic!(
+        match scause & 0xff {
+            8 => {
+                // E-call from U-mode
+            }
+            // 3 => {
+            //     // Breakpoint
+            //     _breakpoint();
+            //     Sepc.write(Sepc.read() + 8);
+            // }
+            _ => panic!(
                 "Unexpected Exception in Kernel: \n\tScause={}\n\tStval={}",
                 scause,
                 Stval.read()
-            );
+            ),
         }
     }
+}
+
+pub fn _breakpoint() {
+    cprintln!("Breakpoint");
 }
 
 #[naked]

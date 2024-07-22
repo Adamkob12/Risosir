@@ -1,5 +1,6 @@
 use crate::{
     arch::memlayout::{TRAMPOLINE_VADDR, TRAPFRAME_VADDR},
+    cprint, cprintln,
     mem::{
         alloc_frame,
         paging::{Frame, Page, PageTable, PageTableLevel},

@@ -40,6 +40,13 @@ pub unsafe fn start() -> ! {
     // Delegate exception and interrupt handling to S-mode
     Medeleg.write(0xffff);
     Mideleg.write(0xffff);
+
+    Sie.write(
+        Sie.read()
+            | SupervisorInterrupt::External.bitmask()
+            | SupervisorInterrupt::Software.bitmask()
+            | SupervisorInterrupt::Timer.bitmask(),
+    );
     // Sie.write(Sie.read() | SIE_SEIE | SIE_SSIE);
     // Configure Physical Memory Protection to give supervisor mode access to all of physical memory.
     Pmpaddr0.write(0xffffffffffffffff);

@@ -70,6 +70,10 @@ impl_csr_reg_rw!(Satp, u64, "satp");
 pub struct Scause;
 impl_csr_reg_rw!(Scause, u64, "scause");
 
+/// CSR register that stores info about the execution status of the current hart.
+pub struct Sstatus;
+impl_csr_reg_rw!(Sstatus, u64, "sstatus");
+
 /// CSR register that contains the exception sepcific info on trap
 pub struct Stval;
 impl_csr_reg_rw!(Stval, u64, "stval");

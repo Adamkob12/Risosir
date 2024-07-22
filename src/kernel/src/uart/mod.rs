@@ -1,4 +1,10 @@
-use crate::{arch::memlayout::UART_BASE_ADDR, keyboard::KEYBOARD, Console};
+use core::fmt::Write;
+
+use crate::{
+    arch::memlayout::UART_BASE_ADDR,
+    keyboard::{Keyboard, KEYBOARD},
+    Console,
+};
 use spin::Mutex;
 
 /// Uart 16550
@@ -100,10 +106,10 @@ impl Uart {
         }
     }
 
-    pub fn interrupt(&mut self, console: &mut Console) {
-        self.async_send_pending(console);
+    pub fn interrupt(&mut self, console: &mut Console, keyboard: &mut Keyboard) {
+        // self.async_send_pending(console);
         while let Some(key) = unsafe { self.get_next() } {
-            if KEYBOARD.lock().update_new_press(key).is_err() {
+            if keyboard.update_new_press(key).is_err() {
                 return;
             }
         }

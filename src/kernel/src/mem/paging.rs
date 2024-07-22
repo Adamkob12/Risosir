@@ -8,7 +8,7 @@ use crate::{
         },
         registers::{csr::Satp, WriteInto},
     },
-    cprint, cprintln, end_of_kernel_data_section,
+    cprint, cprintln, end_of_kernel_code_section, end_of_kernel_data_section,
     param::{PAGE_SIZE, RAM_SIZE},
     trampoline::trampoline,
 };
@@ -47,9 +47,7 @@ pub enum PageTableLevel {
 /// The given page table must be valid and safe to use
 pub unsafe fn set_current_page_table(pt: &'static PageTable) {
     let sv39_mode: u64 = 8 << 60;
-    cprintln!("{:#p}", pt);
     let pt_ppn = pt as *const PageTable as u64 >> 12;
-    cprintln!("{:#x}", pt_ppn);
     Satp.write(sv39_mode | pt_ppn);
     sfence_vma();
     // loop {}
@@ -88,13 +86,33 @@ pub unsafe fn init_kernel_page_table() {
     }
 
     #[cfg(feature = "debug-allocations")]
-    cprintln!("Mapping Kernel Data (text + data + rodata sections)");
-    // Map kernel source code (text section)
-    for addr in (KERNEL_BASE_ADDR..end_of_kernel_data_section()).step_by(PAGE_SIZE) {
+    cprintln!("Mapping Kernel Text (Source code)");
+    // Map kernel source code (text section), leave space for trampoline
+    for addr in (KERNEL_BASE_ADDR..(end_of_kernel_code_section() - PAGE_SIZE)).step_by(PAGE_SIZE) {
         KERNEL_PAGE_TABLE.strong_map(
             VirtAddr::from_raw(addr as u64),
             PhysAddr::from_raw(addr as u64),
-            PTEFlags::valid().readable().writable().executable(),
+            PTEFlags::valid().readable().executable(),
+            PageTableLevel::L2,
+        );
+    }
+
+    // Map trampoline page
+    KERNEL_PAGE_TABLE.strong_map(
+        VirtAddr::from_raw(TRAMPOLINE_VADDR as u64),
+        PhysAddr::from_raw(trampoline as u64),
+        PTEFlags::valid().readable().writable().executable(),
+        PageTableLevel::L2,
+    );
+
+    #[cfg(feature = "debug-allocations")]
+    cprintln!("Mapping Kernel Data (data + rodata sections)");
+    // Map kernel source code (text section)
+    for addr in (end_of_kernel_code_section()..end_of_kernel_data_section()).step_by(PAGE_SIZE) {
+        KERNEL_PAGE_TABLE.strong_map(
+            VirtAddr::from_raw(addr as u64),
+            PhysAddr::from_raw(addr as u64),
+            PTEFlags::valid().readable().writable(),
             PageTableLevel::L2,
         );
     }
@@ -150,14 +168,6 @@ pub unsafe fn init_kernel_page_table() {
             PageTableLevel::L2,
         );
     }
-
-    // Map trampoline page
-    KERNEL_PAGE_TABLE.strong_map(
-        VirtAddr::from_raw(TRAMPOLINE_VADDR as u64),
-        PhysAddr::from_raw(trampoline as u64),
-        PTEFlags::valid().readable().writable().executable(),
-        PageTableLevel::L2,
-    );
 }
 
 impl PageTableLevel {

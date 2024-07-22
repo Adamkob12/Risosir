@@ -1,3 +1,5 @@
+use crate::arch::registers::{csr::Sstatus, ReadFrom, WriteInto};
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(u64)]
 #[non_exhaustive]
@@ -26,4 +28,12 @@ impl SupervisorInterrupt {
     pub fn bitmask(&self) -> u64 {
         1 << (*self as u64)
     }
+}
+
+pub fn enable_interrupts() {
+    unsafe { Sstatus.write(Sstatus.read() | (1 << 1)) };
+}
+
+pub fn disable_interrupts() {
+    unsafe { Sstatus.write(Sstatus.read() & !(1 << 1)) };
 }

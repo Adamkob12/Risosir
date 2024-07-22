@@ -22,7 +22,7 @@ pub const TIMER_INTERRUPT_INTERVAL: u64 = 1_000_000 * 10;
 pub type ProcId = u8;
 
 pub const PAGE_SIZE: usize = 4096;
-pub const PAGES_PER_STACK: usize = 10;
+pub const PAGES_PER_STACK: usize = 25;
 pub const STACK_SIZE: usize = PAGE_SIZE * PAGES_PER_STACK;
 
 pub const PAGES_PER_HEAP: usize = 1000;
@@ -30,6 +30,7 @@ pub const HEAP_SIZE: usize = PAGES_PER_HEAP * PAGE_SIZE;
 
 /// The maximum amount of active processes at a time
 pub const NPROC: usize = ProcId::max_value() as usize;
+// pub const NPROC: usize = 100;
 
 pub const RAM_SIZE: usize = 200 * MB;
 

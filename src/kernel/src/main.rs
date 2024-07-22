@@ -1,4 +1,5 @@
 #![feature(custom_test_frameworks)]
+#![allow(internal_features)]
 #![reexport_test_harness_main = "test_main"]
 #![allow(static_mut_refs)]
 #![test_runner(kernel::test_runner)]
@@ -9,14 +10,17 @@
 use core::arch::asm;
 use core::sync::atomic::Ordering;
 use core::{panic::PanicInfo, sync::atomic::AtomicBool};
-use kernel::arch::registers::csr::{Sie, Stvec};
+use kernel::arch::common::privilage::PrivLevel;
+use kernel::arch::registers::csr::{Sie, Sstatus, Stvec};
 use kernel::arch::registers::WriteInto;
 use kernel::arch::registers::{gpr::Tp, ReadFrom};
 use kernel::console::init_console;
 use kernel::mem::init_kernel_allocator;
 use kernel::mem::paging::{init_kernel_page_table, set_current_page_table, KERNEL_PAGE_TABLE};
+use kernel::plic::{init_plic_global, init_plic_hart};
 use kernel::proc::init_procs;
-use kernel::trap::{self, SupervisorInterrupt};
+use kernel::trampoline::trampoline;
+use kernel::trap::{self, SupervisorInterrupt, _breakpoint, enable_interrupts};
 use kernel::uart::UART;
 use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
 
@@ -58,10 +62,10 @@ static STARTED: AtomicBool = AtomicBool::new(false);
 
 #[export_name = "main"]
 extern "C" fn main() -> ! {
-    let cpuid = unsafe { Tp.read() };
+    let hart_id = unsafe { Tp.read() };
 
-    if cpuid == 0 {
-        unsafe { init_kernel() };
+    if hart_id == 0 {
+        unsafe { init_kernel(hart_id) };
         // The kernel has officially booted
         STARTED.store(true, Ordering::SeqCst);
     }
@@ -69,7 +73,7 @@ extern "C" fn main() -> ! {
         // cprintln!("{} waiting", cpuid);
         // Wait for CPU #0 to set up the kernel properly
     }
-    cprintln!("Hello from Hart #{}", cpuid);
+    cprintln!("Hello from Hart #{}", hart_id);
     loop {
         unsafe { asm!("wfi") };
     }
@@ -77,11 +81,12 @@ extern "C" fn main() -> ! {
 
 /// Will be called when the kernel is booting, only from CPU#0
 #[allow(unsafe_op_in_unsafe_fn)]
-unsafe fn init_kernel() {
+unsafe fn init_kernel(hart_id: u64) {
     init_console();
     cprintln!("\nBooting Kernel...");
-    cprintln!("End of kernel code={:#x}", end_of_kernel_code_section());
-    cprintln!("End of kernel data={:#x}", end_of_kernel_data_section());
+    cprintln!("End of kernel code : {:#x}", end_of_kernel_code_section());
+    cprintln!("Trampoline frame   : {:#x}", trampoline as u64);
+    cprintln!("End of kernel data : {:#x}", end_of_kernel_data_section());
     init_kernel_allocator();
     init_kernel_page_table();
     set_current_page_table(&KERNEL_PAGE_TABLE);
@@ -96,4 +101,8 @@ unsafe fn init_kernel() {
     );
     // Init kernel trap handler
     Stvec.write(trap::kernelvec as u64);
+    init_plic_global();
+    init_plic_hart(hart_id, PrivLevel::S);
+    // Enable S-Mode interrupts
+    enable_interrupts();
 }

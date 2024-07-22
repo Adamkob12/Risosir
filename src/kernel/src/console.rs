@@ -1,4 +1,7 @@
-use crate::uart::{init_uart, UART};
+use crate::{
+    trap::{disable_interrupts, enable_interrupts},
+    uart::{init_uart, UART},
+};
 use core::ascii;
 use spin::Mutex;
 
@@ -48,7 +51,7 @@ impl Console {
     }
 
     /// return how many chars have been written
-    fn write_str(&mut self, s: &str) -> usize {
+    pub fn write_str(&mut self, s: &str) -> usize {
         let mut chars_written: usize = 0;
         for c in s.chars() {
             let _ = self
@@ -86,9 +89,10 @@ macro_rules! cprintln {
 #[doc(hidden)]
 pub fn _print(args: core::fmt::Arguments) {
     use core::fmt::Write;
-
+    disable_interrupts();
     CONSOLE
         .lock()
         .write_fmt(args)
         .expect("Couldn't write to console");
+    enable_interrupts();
 }
