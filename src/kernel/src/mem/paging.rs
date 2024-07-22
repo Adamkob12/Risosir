@@ -20,6 +20,10 @@ pub static mut KERNEL_PAGE_TABLE: PageTable = PageTable::empty();
 #[repr(C, align(4096))]
 pub struct Frame([u8; PAGE_SIZE]);
 
+#[derive(Clone, Copy)]
+#[repr(C, align(4096))]
+pub struct Page([u8; PAGE_SIZE]);
+
 pub(super) const fn garbage_frame() -> Frame {
     Frame([0; PAGE_SIZE])
 }

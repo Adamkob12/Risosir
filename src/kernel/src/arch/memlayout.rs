@@ -5,6 +5,8 @@
 
 // CLINT
 
+use crate::param::{PAGE_SIZE, RAM_SIZE};
+
 /// Qemu-virt defaults to emulate the [`SiFive CLINT`](https://sifive.cdn.prismic.io/sifive%2Fc89f6e5a-cf9e-44c3-a3db-04420702dcc1_sifive+e31+manual+v19.08.pdf)
 pub const CLINT_BASE_ADDR: usize = 0x0200_0000;
 /// The offset that the `mtimecmp` registers are stored at. For the `mtimecmp` register that corresponds to hard i, add `i * 8` to this offset.
@@ -25,6 +27,9 @@ pub const UART_BASE_ADDR: usize = 0x1000_0000;
 
 /// The start of the kernel source code in RAM
 pub const KERNEL_BASE_ADDR: usize = 0x8000_0000;
+
+pub const TRAMPOLINE_ADDR: usize = KERNEL_BASE_ADDR + RAM_SIZE - PAGE_SIZE;
+pub const TRAPFRAME_ADDR: usize = TRAMPOLINE_ADDR - PAGE_SIZE;
 
 // VIRTIO
 

@@ -9,11 +9,14 @@
 use core::arch::asm;
 use core::sync::atomic::Ordering;
 use core::{panic::PanicInfo, sync::atomic::AtomicBool};
+use kernel::arch::registers::csr::Sie;
+use kernel::arch::registers::WriteInto;
 use kernel::arch::registers::{gpr::Tp, ReadFrom};
 use kernel::console::init_console;
 use kernel::mem::init_kernel_allocator;
 use kernel::mem::paging::{init_kernel_page_table, set_current_page_table, KERNEL_PAGE_TABLE};
 use kernel::proc::init_procs;
+use kernel::trap::SupervisorInterrupt;
 use kernel::uart::UART;
 use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
 
@@ -81,4 +84,19 @@ unsafe fn init_kernel() {
     init_kernel_page_table();
     set_current_page_table(&KERNEL_PAGE_TABLE);
     init_procs();
+    cprintln!("SIE: {:#b}", Sie.read());
+    cprintln!(
+        "Trying: {:#b}",
+        Sie.read()
+            | SupervisorInterrupt::External.bitmask()
+            | SupervisorInterrupt::Software.bitmask()
+            | SupervisorInterrupt::Timer.bitmask(),
+    );
+    Sie.write(
+        Sie.read()
+            | SupervisorInterrupt::External.bitmask()
+            | SupervisorInterrupt::Software.bitmask()
+            | SupervisorInterrupt::Timer.bitmask(),
+    );
+    cprintln!("SIE: {:#b}", Sie.read());
 }
