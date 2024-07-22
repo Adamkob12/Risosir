@@ -48,10 +48,12 @@ impl Console {
     }
 
     /// return how many chars have been written
-    fn write_str(&mut self, s: &[ascii::Char]) -> usize {
+    fn write_str(&mut self, s: &str) -> usize {
         let mut chars_written: usize = 0;
-        for c in s {
-            let _ = self.write_char(*c).map_err(|_| return chars_written);
+        for c in s.chars() {
+            let _ = self
+                .write_char(c.as_ascii().unwrap_or(ascii::Char::QuestionMark))
+                .map_err(|_| return chars_written);
             chars_written += 1;
         }
         chars_written
@@ -59,15 +61,14 @@ impl Console {
 }
 
 impl core::fmt::Write for Console {
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        let ret = s
-            .as_ascii()
-            .map(|chars| self.write_str(chars))
-            .filter(|written| *written == s.len())
-            .map(|_| ())
-            .ok_or(core::fmt::Error);
-        UART.lock().sync_send_pending(self);
-        ret
+    fn write_str(&mut self, mut s: &str) -> core::fmt::Result {
+        let mut read = 0;
+        while read < s.len() {
+            s = &s[read..];
+            read += self.write_str(s);
+            UART.lock().sync_send_pending(self);
+        }
+        Ok(())
     }
 }
 

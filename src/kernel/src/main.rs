@@ -9,14 +9,14 @@
 use core::arch::asm;
 use core::sync::atomic::Ordering;
 use core::{panic::PanicInfo, sync::atomic::AtomicBool};
-use kernel::arch::registers::csr::Sie;
+use kernel::arch::registers::csr::{Sie, Stvec};
 use kernel::arch::registers::WriteInto;
 use kernel::arch::registers::{gpr::Tp, ReadFrom};
 use kernel::console::init_console;
 use kernel::mem::init_kernel_allocator;
 use kernel::mem::paging::{init_kernel_page_table, set_current_page_table, KERNEL_PAGE_TABLE};
 use kernel::proc::init_procs;
-use kernel::trap::SupervisorInterrupt;
+use kernel::trap::{self, SupervisorInterrupt};
 use kernel::uart::UART;
 use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
 
@@ -27,6 +27,7 @@ fn panic(info: &PanicInfo) -> ! {
         // UART.force_unlock();
         // CONSOLE.force_unlock();
         let mut uart = UART.lock();
+
         uart.write_chars(b"\nPANIC: ");
         if let Some(msg) = info.message().as_str() {
             uart.write_chars(msg.as_bytes());
@@ -65,6 +66,7 @@ extern "C" fn main() -> ! {
         STARTED.store(true, Ordering::SeqCst);
     }
     while !STARTED.load(Ordering::SeqCst) {
+        // cprintln!("{} waiting", cpuid);
         // Wait for CPU #0 to set up the kernel properly
     }
     cprintln!("Hello from Hart #{}", cpuid);
@@ -83,15 +85,9 @@ unsafe fn init_kernel() {
     init_kernel_allocator();
     init_kernel_page_table();
     set_current_page_table(&KERNEL_PAGE_TABLE);
+    cprintln!("Page Table has been initialized.");
     init_procs();
-    cprintln!("SIE: {:#b}", Sie.read());
-    cprintln!(
-        "Trying: {:#b}",
-        Sie.read()
-            | SupervisorInterrupt::External.bitmask()
-            | SupervisorInterrupt::Software.bitmask()
-            | SupervisorInterrupt::Timer.bitmask(),
-    );
+    // Enable S-mode software, external and timer interrupts
     Sie.write(
         Sie.read()
             | SupervisorInterrupt::External.bitmask()
@@ -99,4 +95,5 @@ unsafe fn init_kernel() {
             | SupervisorInterrupt::Timer.bitmask(),
     );
     cprintln!("SIE: {:#b}", Sie.read());
+    Stvec.write(trap::kernelvec as u64);
 }
