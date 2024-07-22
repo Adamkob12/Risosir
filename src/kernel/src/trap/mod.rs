@@ -1,14 +1,31 @@
 pub mod exception;
 pub mod interrupt;
 
-use crate::cprintln;
+use crate::{arch::registers::WriteInto, cprintln};
 use core::arch::asm;
 pub use exception::*;
 pub use interrupt::*;
 
 #[no_mangle]
-pub extern "C" fn kerneltrap() {
-    todo!("Hi");
+pub unsafe extern "C" fn kerneltrap() {
+    use crate::arch::registers::csr::*;
+    use crate::arch::registers::ReadFrom;
+
+    let scause = Scause.read();
+    if (scause & (1 << 63)) > 0 {
+        // It's an interrupt
+    } else {
+        // It's an exception
+        if (scause & 0xff) == 8 {
+            // Syscall from U-mode
+        } else {
+            panic!(
+                "Unexpected Exception in Kernel: \n\tScause={}\n\tStval={}",
+                scause,
+                Stval.read()
+            );
+        }
+    }
 }
 
 #[naked]

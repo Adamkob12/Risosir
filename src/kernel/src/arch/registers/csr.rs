@@ -58,6 +58,10 @@ impl_csr_reg_rw!(Mideleg, u64, "mideleg");
 pub struct Mtval;
 impl_csr_reg_rw!(Mtval, u64, "mtval");
 
+/// CSR register that contains the cause of the exception
+pub struct Mcause;
+impl_csr_reg_rw!(Mcause, u64, "mcause");
+
 /// CSR register that contains information about paging.
 pub struct Satp;
 impl_csr_reg_rw!(Satp, u64, "satp");
@@ -74,9 +78,9 @@ impl_csr_reg_rw!(Stval, u64, "stval");
 pub struct Stvec;
 impl_csr_reg_rw!(Stvec, u64, "stvec");
 
-/// CSR register that contains the cause of the exception
-pub struct Mcause;
-impl_csr_reg_rw!(Mcause, u64, "mcause");
+/// CSR register that contains the address that created the exception
+pub struct Sepc;
+impl_csr_reg_rw!(Sepc, u64, "sepc");
 
 /// CSR register that stores interrupt enable bits (interrupt `i` will not be accepted unless Sie[i] is on)
 pub struct Sie;

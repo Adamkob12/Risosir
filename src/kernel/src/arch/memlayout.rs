@@ -29,7 +29,6 @@ pub const UART_BASE_ADDR: usize = 0x1000_0000;
 pub const KERNEL_BASE_ADDR: usize = 0x8000_0000;
 
 pub const TRAMPOLINE_ADDR: usize = KERNEL_BASE_ADDR + RAM_SIZE - PAGE_SIZE;
-pub const TRAPFRAME_ADDR: usize = TRAMPOLINE_ADDR - PAGE_SIZE;
 
 // VIRTIO
 
