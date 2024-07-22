@@ -7,7 +7,6 @@
 #![feature(panic_info_message)]
 
 use core::arch::asm;
-use core::ptr::null;
 use core::sync::atomic::Ordering;
 use core::{panic::PanicInfo, sync::atomic::AtomicBool};
 use kernel::arch::registers::csr::{Sie, Stvec};
@@ -95,7 +94,6 @@ unsafe fn init_kernel() {
             | SupervisorInterrupt::Software.bitmask()
             | SupervisorInterrupt::Timer.bitmask(),
     );
-    cprintln!("SIE: {:#b}", Sie.read());
     // Init kernel trap handler
     Stvec.write(trap::kernelvec as u64);
 }

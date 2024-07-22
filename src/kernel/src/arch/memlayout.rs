@@ -22,35 +22,30 @@ pub const MTIMECMP_ADDR: usize = CLINT_BASE_ADDR + MTIMECMPS_OFFSET;
 
 /// Qemu-virt emulates a single NS16550 compatible UART
 pub const UART_BASE_ADDR: usize = 0x1000_0000;
+/// The source ID in the PLIC
+pub const UART_IRQ: usize = 10;
 
 // KERNEL
 
 /// The start of the kernel source code in RAM
 pub const KERNEL_BASE_ADDR: usize = 0x8000_0000;
 
-pub const TRAMPOLINE_ADDR: usize = KERNEL_BASE_ADDR + RAM_SIZE - PAGE_SIZE;
+pub const TRAMPOLINE_VADDR: usize = KERNEL_BASE_ADDR + RAM_SIZE - PAGE_SIZE;
+pub const TRAPFRAME_VADDR: usize = TRAMPOLINE_VADDR - PAGE_SIZE;
 
 // VIRTIO
 
 // virtio mmio interface
 pub const VIRTIO0: usize = 0x1000_1000;
-pub const VIRTIO0_IRQ: u32 = 1;
+/// The source ID in the PLIC
+pub const VIRTIO0_IRQ: usize = 1;
 
 // PLIC
 
 // qemu puts platform-level interrupt controller (PLIC) here.
 pub const PLIC: usize = 0x0C00_0000;
-pub const PLIC_PRIORITY: usize = PLIC;
-pub const PLIC_PENDING: usize = PLIC + 0x1000;
-#[allow(non_snake_case)]
-pub const fn PLIC_SENABLE(hart: usize) -> usize {
-    PLIC + 0x2080 + hart * 0x100
-}
-#[allow(non_snake_case)]
-pub const fn PLIC_SPRIORITY(hart: usize) -> usize {
-    PLIC + 0x201000 + hart * 0x2000
-}
-#[allow(non_snake_case)]
-pub const fn PLIC_SCLAIM(hart: usize) -> usize {
-    PLIC + 0x201004 + hart * 0x2000
-}
+pub const PLIC_PRIORITY_BASE: usize = PLIC;
+pub const PLIC_PENDING_BASE: usize = PLIC + 0x1000;
+pub const PLIC_ENABLE_BASE: usize = PLIC + 0x2000;
+pub const PLIC_CLAIM_THRESHOLD: usize = PLIC + 0x200000;
+pub const PLIC_CLAIM_BASE: usize = PLIC + 0x200004;

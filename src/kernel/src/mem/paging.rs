@@ -3,13 +3,14 @@ use crate::{
     arch::{
         common::sfence_vma,
         memlayout::{
-            CLINT_BASE_ADDR, KERNEL_BASE_ADDR, MTIMECMP_ADDR, MTIME_ADDR, PLIC, TRAMPOLINE_ADDR,
+            CLINT_BASE_ADDR, KERNEL_BASE_ADDR, MTIMECMP_ADDR, MTIME_ADDR, PLIC, TRAMPOLINE_VADDR,
             UART_BASE_ADDR, VIRTIO0,
         },
         registers::{csr::Satp, WriteInto},
     },
     cprint, cprintln, end_of_kernel_data_section,
     param::{PAGE_SIZE, RAM_SIZE},
+    trampoline::trampoline,
 };
 use core::ptr::NonNull;
 
@@ -152,8 +153,8 @@ pub unsafe fn init_kernel_page_table() {
 
     // Map trampoline page
     KERNEL_PAGE_TABLE.strong_map(
-        VirtAddr::from_raw(TRAMPOLINE_ADDR as u64),
-        PhysAddr::from_raw(TRAMPOLINE_ADDR as u64),
+        VirtAddr::from_raw(TRAMPOLINE_VADDR as u64),
+        PhysAddr::from_raw(trampoline as u64),
         PTEFlags::valid().readable().writable().executable(),
         PageTableLevel::L2,
     );

@@ -23,8 +23,10 @@ pub mod file;
 pub mod kernelvec;
 pub mod mem;
 pub mod param;
+pub mod plic;
 pub mod proc;
 pub mod start;
+pub mod trampoline;
 pub mod trap;
 pub mod uart;
 

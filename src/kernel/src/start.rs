@@ -44,7 +44,6 @@ pub unsafe fn start() -> ! {
     // Configure Physical Memory Protection to give supervisor mode access to all of physical memory.
     Pmpaddr0.write(0xffffffffffffffff);
     Pmpcfg0.write(0xf);
-
     // Save the hart id in TP because we won't have access to it outside of machine mode
     let hart_id = Mhartid.read();
     Tp.write(hart_id);
@@ -73,7 +72,6 @@ pub type DataToHandleTimerInt = [u64; 5];
 static mut TIMER_INTERRUPT_DATA: [DataToHandleTimerInt; NCPU] = [[0; 5]; NCPU];
 
 /// Set up timer interrupts
-#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn setup_timer_interrupts() {
     // Get hart id
     let hart_id = Mhartid.read();
