@@ -4,16 +4,16 @@ use core::arch::asm;
 #[allow(unsafe_op_in_unsafe_fn)]
 #[no_mangle]
 pub unsafe fn timervec() {
-    use crate::arch::registers::csr::*;
-    use crate::arch::registers::ReadFrom;
-    crate::cprintln!(
-        "SIE: {}, SIP: {}, SCAUSE: {}, Stval: {:#x}, Stvec: {:#x}",
-        Sie.read(),
-        Sip.read(),
-        Scause.read(),
-        Stval.read(),
-        Stvec.read(),
-    );
+    // use crate::arch::registers::csr::*;
+    // use crate::arch::registers::ReadFrom;
+    // crate::cprintln!(
+    //     "SIE: {}, SIP: {}, SCAUSE: {}, Stval: {:#x}, Stvec: {:#x}",
+    //     Sie.read(),
+    //     Sip.read(),
+    //     Scause.read(),
+    //     Stval.read(),
+    //     Stvec.read(),
+    // );
 
     asm!("csrrw a0, mscratch, a0");
     // a0 contains the address of [`DataToHandleTimerInt`], with a dedicated 3 places to save the value of registers.

@@ -1,16 +1,14 @@
 pub mod exception;
 pub mod interrupt;
 
+use crate::cprintln;
 use core::arch::asm;
 pub use exception::*;
 pub use interrupt::*;
 
-use crate::cprintln;
-
 #[no_mangle]
 pub extern "C" fn kerneltrap() {
-    cprintln!("Hey");
-    // todo!("Hi");
+    todo!("Hi");
 }
 
 #[naked]

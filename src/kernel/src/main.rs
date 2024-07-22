@@ -96,4 +96,6 @@ unsafe fn init_kernel() {
     );
     cprintln!("SIE: {:#b}", Sie.read());
     Stvec.write(trap::kernelvec as u64);
+    let p = (4 as *mut u8).read_volatile();
+    // cprintln!("{}", p);
 }
