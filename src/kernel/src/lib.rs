@@ -21,6 +21,7 @@ pub mod console;
 pub mod entry;
 pub mod file;
 pub mod kernelvec;
+pub mod keyboard;
 pub mod mem;
 pub mod param;
 pub mod plic;

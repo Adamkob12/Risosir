@@ -1,4 +1,4 @@
-use crate::{arch::memlayout::UART_BASE_ADDR, Console};
+use crate::{arch::memlayout::UART_BASE_ADDR, keyboard::KEYBOARD, Console};
 use spin::Mutex;
 
 /// Uart 16550
@@ -96,6 +96,15 @@ impl Uart {
                 .filter(|_| self.read_register::<LSR>() & LSR_THR_EMPTY_BIT == 1)
             {
                 self.write_to_register::<THR>(char as u8);
+            }
+        }
+    }
+
+    pub fn interrupt(&mut self, console: &mut Console) {
+        self.async_send_pending(console);
+        while let Some(key) = unsafe { self.get_next() } {
+            if KEYBOARD.lock().update_new_press(key).is_err() {
+                return;
             }
         }
     }
