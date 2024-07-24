@@ -11,6 +11,7 @@ forced-target = "riscv64gc-unknown-none-elf"
 spin = "0.5.2"
 linked_list_allocator = "0.9"
 conquer-once = { version = "0.4", default-features = false }
+fs = { path = "../fs" }
 
 [lib]
 name = "kernel"
@@ -21,3 +22,4 @@ default = []
 # default = ["debug-allocations"]
 debug-allocations = []
 test-kernel = []
+fs = []

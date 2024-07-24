@@ -20,6 +20,7 @@ pub mod arch;
 pub mod console;
 pub mod entry;
 pub mod file;
+pub mod fs;
 pub mod kernelvec;
 pub mod keyboard;
 pub mod mem;
