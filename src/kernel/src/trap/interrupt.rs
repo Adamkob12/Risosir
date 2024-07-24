@@ -37,3 +37,14 @@ pub fn enable_interrupts() {
 pub fn disable_interrupts() {
     unsafe { Sstatus.write(Sstatus.read() & !(1 << 1)) };
 }
+
+pub fn without_interrupts<F, T>(f: F) -> T
+where
+    F: FnOnce() -> T,
+{
+    let sie = unsafe { Sstatus.read() & (1 << 1) };
+    disable_interrupts();
+    let t = f();
+    unsafe { Sstatus.write(Sstatus.read() | sie) };
+    t
+}

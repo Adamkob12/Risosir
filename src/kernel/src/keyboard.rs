@@ -1,4 +1,7 @@
-use crate::uart::{init_uart, UART};
+use crate::{
+    cprintln,
+    uart::{init_uart, UART},
+};
 use core::ascii;
 use spin::Mutex;
 
@@ -47,5 +50,12 @@ impl Keyboard {
             self.w_pointer = self.w_pointer.wrapping_add(1);
             Ok(())
         }
+    }
+}
+
+pub fn read_recent_input() {
+    let mut keyboard = KEYBOARD.lock();
+    while let Some(key) = keyboard.read_next_press() {
+        cprintln!("Key pressed: {}", key);
     }
 }

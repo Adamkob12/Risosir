@@ -5,7 +5,8 @@ use crate::{
     keyboard::{Keyboard, KEYBOARD},
     Console,
 };
-use spin::Mutex;
+use alloc::format;
+use spin::{Mutex, MutexGuard};
 
 /// Uart 16550
 /// Implementation based off [`this spec`](https://www.lammertbies.nl/comm/info/serial-uart#DLX)
@@ -19,7 +20,7 @@ const _MCR: u8 = 4;
 /// Uart LSR register for line status
 const LSR: u8 = 5;
 const LSR_THR_EMPTY_BIT: u8 = 1 << 5;
-const LSR_RHR_EMPTY_BIT: u8 = 1;
+const LSR_RHR_READY_BIT: u8 = 1 << 0;
 /// Uart LCR register
 const LCR: u8 = 3;
 /// Uart DLL register, only avaliable when dlab is set
@@ -77,7 +78,7 @@ impl Uart {
     }
 
     pub unsafe fn get_next(&mut self) -> Option<u8> {
-        (self.read_register::<LSR>() & LSR_RHR_EMPTY_BIT == 1)
+        (self.read_register::<LSR>() & LSR_RHR_READY_BIT == 1)
             .then_some(self.read_register::<THR>())
     }
 
@@ -97,21 +98,29 @@ impl Uart {
     /// then it returns and *only* continues after the uart interrupts and requests more data.
     pub fn async_send_pending(&mut self, console: &mut Console) {
         unsafe {
-            while let Some(char) = console
-                .read_next()
-                .filter(|_| self.read_register::<LSR>() & LSR_THR_EMPTY_BIT == 1)
-            {
-                self.write_to_register::<THR>(char as u8);
+            while self.read_register::<LSR>() & LSR_THR_EMPTY_BIT == 1 {
+                if let Some(char) = console.read_next() {
+                    self.write_to_register::<THR>(char as u8);
+                } else {
+                    break;
+                }
             }
         }
     }
 
-    pub fn interrupt(&mut self, console: &mut Console, keyboard: &mut Keyboard) {
-        // self.async_send_pending(console);
+    pub fn interrupt(
+        &mut self,
+        mut console: MutexGuard<Console>,
+        mut keyboard: MutexGuard<Keyboard>,
+    ) {
+        // loop {}
         while let Some(key) = unsafe { self.get_next() } {
+            console.write_str(&format!("Found Key: {}", key));
+            self.sync_send_pending(&mut console);
             if keyboard.update_new_press(key).is_err() {
-                return;
+                break;
             }
         }
+        self.async_send_pending(&mut *console);
     }
 }

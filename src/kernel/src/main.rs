@@ -6,8 +6,10 @@
 #![no_std]
 #![no_main]
 #![feature(panic_info_message)]
+#![feature(riscv_ext_intrinsics)]
 
 use core::arch::asm;
+use core::arch::riscv64::wfi;
 use core::sync::atomic::Ordering;
 use core::{panic::PanicInfo, sync::atomic::AtomicBool};
 use kernel::arch::common::privilage::PrivLevel;
@@ -15,12 +17,13 @@ use kernel::arch::registers::csr::{Sie, Sstatus, Stvec};
 use kernel::arch::registers::WriteInto;
 use kernel::arch::registers::{gpr::Tp, ReadFrom};
 use kernel::console::init_console;
+use kernel::keyboard::{read_recent_input, KEYBOARD};
 use kernel::mem::init_kernel_allocator;
 use kernel::mem::paging::{init_kernel_page_table, set_current_page_table, KERNEL_PAGE_TABLE};
 use kernel::plic::{init_plic_global, init_plic_hart};
 use kernel::proc::init_procs;
 use kernel::trampoline::trampoline;
-use kernel::trap::{self, SupervisorInterrupt, _breakpoint, enable_interrupts};
+use kernel::trap::{self, SupervisorInterrupt, _breakpoint, disable_interrupts, enable_interrupts};
 use kernel::uart::UART;
 use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
 
@@ -70,12 +73,17 @@ extern "C" fn main() -> ! {
         STARTED.store(true, Ordering::SeqCst);
     }
     while !STARTED.load(Ordering::SeqCst) {
-        // cprintln!("{} waiting", cpuid);
+        unsafe { asm!("wfi") };
         // Wait for CPU #0 to set up the kernel properly
     }
-    cprintln!("Hello from Hart #{}", hart_id);
-    loop {
-        unsafe { asm!("wfi") };
+    if STARTED.load(Ordering::SeqCst) {
+        cprintln!("Hello from Hart #{}", hart_id);
+
+        loop {
+            unsafe { asm!("wfi") };
+        }
+    } else {
+        panic!("Something up with the ordering of instructions");
     }
 }
 
@@ -103,6 +111,5 @@ unsafe fn init_kernel(hart_id: u64) {
     Stvec.write(trap::kernelvec as u64);
     init_plic_global();
     init_plic_hart(hart_id, PrivLevel::S);
-    // Enable S-Mode interrupts
     enable_interrupts();
 }
