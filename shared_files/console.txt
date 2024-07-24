@@ -1,0 +1,896 @@
+use crate::{
+    trap::{disable_interrupts, enable_interrupts, without_interrupts},
+    uart::{init_uart, Uart, UART},
+};
+use core::ascii;
+use spin::{Mutex, MutexGuard};
+
+pub const CONSOLE_DEV_ID: usize = 1;
+type ConsolePtr = u16;
+const CONSOLE_BUFF_LEN: usize = ConsolePtr::MAX as usize + 1;
+
+pub struct Console {
+    buf: [ascii::Char; CONSOLE_BUFF_LEN],
+    r_pointer: ConsolePtr,
+    w_pointer: ConsolePtr,
+}
+
+pub static CONSOLE: Mutex<Console> = Mutex::new(Console::new());
+
+pub unsafe fn init_console() {
+    unsafe { init_uart() };
+}
+
+impl Console {
+    const fn new() -> Self {
+        Console {
+            buf: [ascii::Char::QuestionMark; CONSOLE_BUFF_LEN],
+            r_pointer: 0,
+            w_pointer: 0,
+        }
+    }
+
+    /// If there is a pending char to read, read it.
+    pub fn read_next(&mut self) -> Option<ascii::Char> {
+        (self.r_pointer != self.w_pointer).then(|| {
+            let ret = self.buf[self.r_pointer as usize];
+            self.r_pointer = self.r_pointer.wrapping_add(1);
+            ret
+        })
+    }
+
+    fn write_char(&mut self, c: ascii::Char) -> Result<(), ()> {
+        if self.w_pointer.wrapping_add(1) == self.r_pointer {
+            // Buffer full
+            Err(())
+        } else {
+            self.buf[self.w_pointer as usize] = c;
+            self.w_pointer = self.w_pointer.wrapping_add(1);
+            Ok(())
+        }
+    }
+
+    /// return how many chars have been written
+    pub fn write_str(&mut self, s: &str) -> usize {
+        let mut chars_written: usize = 0;
+        for c in s.chars() {
+            let _ = self
+                .write_char(c.as_ascii().unwrap_or(ascii::Char::QuestionMark))
+                .map_err(|_| return chars_written);
+            chars_written += 1;
+        }
+        chars_written
+    }
+}
+
+impl core::fmt::Write for Console {
+    fn write_str(&mut self, mut s: &str) -> core::fmt::Result {
+        let mut read = 0;
+        while read < s.len() {
+            s = &s[read..];
+            read += self.write_str(s);
+            UART.lock().sync_send_pending(self);
+        }
+        Ok(())
+    }
+}
+
+// pub fn flush_console(mut console: MutexGuard<Console>, mut uart: MutexGuard<Uart>, mut s: &str) {
+//     let mut read = 0;
+//     while read < s.len() {
+//         s = &s[read..];
+//         read += console.write_str(s);
+//         uart.sync_send_pending(&mut console);
+//     }
+// }
+
+#[macro_export]
+macro_rules! cprint {
+    ($($arg:tt)*) => ($crate::_print(format_args!($($arg)*)));
+}
+
+#[macro_export]
+macro_rules! cprintln {
+    () => ($crate::cprint!("\n"));
+    ($($arg:tt)*) => ($crate::cprint!("{}\n", format_args!($($arg)*)));
+}
+
+#[doc(hidden)]
+pub fn _print(args: core::fmt::Arguments) {
+    use core::fmt::Write;
+    without_interrupts(|| {
+        CONSOLE
+            .lock()
+            .write_fmt(args)
+            .expect("Couldn't write to console");
+    });
+}
+
+
+#![feature(ascii_char)]
+#![feature(ascii_char_variants)]
+#![feature(path_file_prefix)]
+
+use std::{
+    ascii,
+    fs::{self, File, OpenOptions},
+    io::{ErrorKind, Read, Seek, SeekFrom, Write},
+    mem,
+    path::Path,
+    slice,
+};
+
+const SHARED_FILES: &str = "shared_files";
+const NODE_MAGIC_NUMBER: u32 = 102030069;
+const FILE_MAGIC_NUMBER: u32 = 900000111;
+const MAX_FILES: usize = 1000;
+const NODES_OFFSET: usize = mem::size_of::<FileMeta>() * MAX_FILES;
+const FILE_NAME_LEN: usize = 18;
+const NODE_SIZE: usize = 1024;
+const FILE_DATA_SIZE: usize = NODE_SIZE - 16;
+/// The address of a node with some NodeId is: (NODES_OFFSET + size_of::<Node>() * NodeId)
+type NodeId = u32;
+type FileId = u16;
+// Must be 32 bytes
+#[repr(C)]
+struct FileMeta {
+    magic_number: u32,                  // 4 bytes, Always =FILE_MAGIC_NUMBER
+    node_list_start: NodeId,            // 4 bytes, the index of the node
+    file_id: FileId,                    // 2 bytes
+    name: [ascii::Char; FILE_NAME_LEN], // 18 bytes
+    size: u32,                          // 4 bytes, size in bytes
+}
+
+type FileData = [u8; FILE_DATA_SIZE];
+
+// Must be 1 KB exactly
+#[repr(C)]
+struct Node {
+    magic_number: u32, // 4 bytes, Always =NODE_MAGIC_NUMBER
+    file_id: FileId,   // 2 byte
+    flags: u16,        // 2 byte
+    next_node: NodeId, // 4 bytes
+    prev_node: NodeId, // 4 bytes
+    // metadata = 16 bytes
+    data: FileData,
+}
+
+const _: () = {
+    if core::mem::size_of::<Node>() != NODE_SIZE {
+        panic!()
+    }
+    if core::mem::size_of::<FileMeta>() != 32 {
+        panic!()
+    }
+};
+
+fn main() {
+    println!("cargo:rustc-link-arg-bin=risosir=--script=src/kernel/kernel.ld");
+    let mut img = OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .truncate(true)
+        .open("a.txt")
+        .unwrap();
+    let shared_files = Path::new(SHARED_FILES);
+    let dir = fs::read_dir(shared_files).unwrap();
+    let mut current_file_id: FileId = 1;
+    let mut current_node_id: NodeId = 1;
+    for entry in dir
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|e| e.is_file())
+    {
+        let mut file_data_buff: FileData = [0; 1024 - 16];
+        let mut shared_file = File::open(&entry).unwrap();
+        let file_name = String::from(entry.file_name().unwrap().to_str().unwrap());
+
+        let file_meta = get_file_meta(&shared_file, file_name, current_file_id, current_node_id);
+        // The file meta is ready, now copy its data to the disk img
+        img.seek(SeekFrom::Start(
+            (current_file_id as usize * size_of::<FileMeta>()) as u64,
+        ))
+        .unwrap();
+
+        let file_meta_buff = as_byte_slice(&file_meta);
+        assert_eq!(file_meta_buff.len(), 32);
+        img.write_all(file_meta_buff).unwrap();
+        // The file meta has been written to the file meta section
+        // Now we need to write the actuall data of the file into the disk img
+
+        let first_node_id = current_node_id;
+        let last_node_id = first_node_id + file_meta.size / FILE_DATA_SIZE as u32;
+        while true {
+            let end = read_max(&mut shared_file, &mut file_data_buff).unwrap();
+            let node = Node {
+                magic_number: NODE_MAGIC_NUMBER,
+                data: file_data_buff,
+                flags: 1,
+                next_node: if current_node_id == last_node_id {
+                    first_node_id
+                } else {
+                    current_node_id + 1
+                },
+                prev_node: if current_node_id == first_node_id {
+                    last_node_id
+                } else {
+                    current_node_id - 1
+                },
+                file_id: current_file_id,
+            };
+
+            img.seek(SeekFrom::Start(
+                (NODES_OFFSET + current_node_id as usize * size_of::<Node>()) as u64,
+            ))
+            .unwrap();
+
+            let node_buff = as_byte_slice(&node);
+            assert_eq!(node_buff.len(), NODE_SIZE);
+            img.write_all(node_buff).unwrap();
+
+            current_node_id += 1;
+
+            if end {
+                break;
+            }
+        }
+
+        current_file_id += 1;
+    }
+}
+
+/// Return Ok(true) if the source has no more information to give
+fn read_max<R: Read + ?Sized>(this: &mut R, mut buf: &mut [u8]) -> std::io::Result<bool> {
+    while !buf.is_empty() {
+        match this.read(buf) {
+            Ok(0) => return Ok(true),
+            Ok(n) => {
+                buf = &mut buf[n..];
+            }
+            Err(e) if e.kind() == ErrorKind::Interrupted => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(false)
+}
+
+fn as_byte_slice<'a, T>(t: &'a T) -> &'a [u8] {
+    unsafe { slice::from_raw_parts(t as *const T as *const u8, size_of::<T>()) }
+}
+
+fn get_file_meta(
+    file: &File,
+    file_name: String,
+    file_id: FileId,
+    current_node_id: NodeId,
+) -> FileMeta {
+    let mut file_name_buff: [ascii::Char; FILE_NAME_LEN] = [ascii::Char::Null; FILE_NAME_LEN];
+    if file_name.len() > FILE_NAME_LEN {
+        panic!(
+            "File name {} too long, must be shorter than {}",
+            file_name, FILE_NAME_LEN
+        );
+    }
+    for (i, char) in file_name
+        .as_ascii()
+        .expect("file name needs to be ascii compatible")
+        .into_iter()
+        .enumerate()
+    {
+        file_name_buff[i] = *char;
+    }
+    let file_size = file.metadata().unwrap().len() as u32;
+
+    FileMeta {
+        magic_number: FILE_MAGIC_NUMBER,
+        file_id,
+        size: file_size,
+        name: file_name_buff,
+        node_list_start: current_node_id,
+    }
+}
+
+
+use super::{ReadFrom, WriteInto};
+use crate::arch::common::privilage::PrivLevel;
+use core::arch::asm;
+
+macro_rules! impl_csr_reg_rw {
+    ($name:ident, $t:ty, $abi_name:literal) => {
+        impl WriteInto for $name {
+            type In = $t;
+            unsafe fn write(&self, val: Self::In) {
+                unsafe {asm!(concat!("csrw ", $abi_name, ", {x}"), x = in(reg) val)};
+            }
+        }
+
+        impl ReadFrom for $name {
+            type Out = $t;
+            unsafe fn read(&self, ) -> Self::Out {
+                let ret: $t;
+                unsafe {asm!(concat!("csrr {x}, ", $abi_name), x = out(reg) ret)};
+                ret
+            }
+        }
+    };
+}
+
+/// CSR register that stores info about the execution status of the current hart.
+pub struct Mstatus;
+impl_csr_reg_rw!(Mstatus, u64, "mstatus");
+
+/// CSR register that stores the id of the current executing hart.
+pub struct Mhartid;
+impl_csr_reg_rw!(Mhartid, u64, "mhartid");
+
+/// CSR register that holds the adress will be jumped to after `mret` is called.
+pub struct Mepc;
+impl_csr_reg_rw!(Mepc, u64, "mepc");
+
+/// CSR register that holds info for handling interrupts
+pub struct Mscratch;
+impl_csr_reg_rw!(Mscratch, u64, "mscratch");
+
+/// CSR register that holds data to where to jump on interrupts / exceptions
+pub struct Mtvec;
+impl_csr_reg_rw!(Mtvec, u64, "mtvec");
+
+/// CSR register that holds machine-mode interrupt enable bits
+pub struct Mie;
+impl_csr_reg_rw!(Mie, u64, "mie");
+
+/// CSR register that stores information about which exceptions should be delegated to S-mode.
+pub struct Medeleg;
+impl_csr_reg_rw!(Medeleg, u64, "medeleg");
+
+/// CSR register that stores information about which interrupts should be delegated to S-mode.
+pub struct Mideleg;
+impl_csr_reg_rw!(Mideleg, u64, "mideleg");
+
+/// CSR register that contains the exception sepcific info on trap
+pub struct Mtval;
+impl_csr_reg_rw!(Mtval, u64, "mtval");
+
+/// CSR register that contains the cause of the exception
+pub struct Mcause;
+impl_csr_reg_rw!(Mcause, u64, "mcause");
+
+/// CSR register that contains information about paging.
+pub struct Satp;
+impl_csr_reg_rw!(Satp, u64, "satp");
+
+/// CSR register that contains the cause of the exception
+pub struct Scause;
+impl_csr_reg_rw!(Scause, u64, "scause");
+
+/// CSR register that stores info about the execution status of the current hart.
+pub struct Sstatus;
+impl_csr_reg_rw!(Sstatus, u64, "sstatus");
+
+/// CSR register that contains the exception sepcific info on trap
+pub struct Stval;
+impl_csr_reg_rw!(Stval, u64, "stval");
+
+/// CSR register that contains the trap handler address
+pub struct Stvec;
+impl_csr_reg_rw!(Stvec, u64, "stvec");
+
+/// CSR register that contains the address that created the exception
+pub struct Sepc;
+impl_csr_reg_rw!(Sepc, u64, "sepc");
+
+/// CSR register that stores interrupt enable bits (interrupt `i` will not be accepted unless Sie[i] is on)
+pub struct Sie;
+impl_csr_reg_rw!(Sie, u64, "sie");
+
+/// CSR register that stores information on pending interrupts.
+pub struct Sip;
+impl_csr_reg_rw!(Sip, u64, "sip");
+
+/// CSR for Physical Memory Protection.
+pub struct Pmpaddr0;
+impl_csr_reg_rw!(Pmpaddr0, u64, "pmpaddr0");
+
+/// CSR for configuring pmpaddr0,1,2,3,4,5,6,7
+pub struct Pmpcfg0;
+impl_csr_reg_rw!(Pmpcfg0, u64, "pmpcfg0");
+
+/// Data stored inside Mstatus[12:11]
+pub struct MstatusMpp;
+const MPP_MASK: u64 = 3u64 << 11;
+
+impl ReadFrom for MstatusMpp {
+    type Out = PrivLevel;
+    unsafe fn read(&self) -> Self::Out {
+        let mstatus = unsafe { Mstatus.read() };
+        let mpp = mstatus & MPP_MASK;
+        PrivLevel::try_from(mpp >> 11).unwrap()
+    }
+}
+
+impl WriteInto for MstatusMpp {
+    type In = PrivLevel;
+    unsafe fn write(&self, val: Self::In) {
+        let mut mstatus = unsafe { Mstatus.read() };
+        mstatus &= !MPP_MASK;
+        mstatus |= (val as u64) << 11;
+        unsafe { Mstatus.write(mstatus) };
+    }
+}
+
+/// Data stored inside Mstatus[3]
+pub struct MstatusMie;
+const MIE_MASK: u64 = 1 << 3;
+
+impl ReadFrom for MstatusMie {
+    type Out = bool;
+    unsafe fn read(&self) -> Self::Out {
+        let mstatus = unsafe { Mstatus.read() };
+        let mie = mstatus & MIE_MASK;
+        mie > 0
+    }
+}
+
+impl WriteInto for MstatusMie {
+    type In = bool;
+    unsafe fn write(&self, val: Self::In) {
+        let mut mstatus = unsafe { Mstatus.read() };
+        mstatus &= !MIE_MASK;
+        mstatus |= (val as u64) << 3;
+        unsafe { Mstatus.write(mstatus) };
+    }
+}
+
+
+use super::{ReadFrom, WriteInto};
+use crate::arch::common::privilage::PrivLevel;
+use core::arch::asm;
+
+macro_rules! impl_csr_reg_rw {
+    ($name:ident, $t:ty, $abi_name:literal) => {
+        impl WriteInto for $name {
+            type In = $t;
+            unsafe fn write(&self, val: Self::In) {
+                unsafe {asm!(concat!("csrw ", $abi_name, ", {x}"), x = in(reg) val)};
+            }
+        }
+
+        impl ReadFrom for $name {
+            type Out = $t;
+            unsafe fn read(&self, ) -> Self::Out {
+                let ret: $t;
+                unsafe {asm!(concat!("csrr {x}, ", $abi_name), x = out(reg) ret)};
+                ret
+            }
+        }
+    };
+}
+
+/// CSR register that stores info about the execution status of the current hart.
+pub struct Mstatus;
+impl_csr_reg_rw!(Mstatus, u64, "mstatus");
+
+/// CSR register that stores the id of the current executing hart.
+pub struct Mhartid;
+impl_csr_reg_rw!(Mhartid, u64, "mhartid");
+
+/// CSR register that holds the adress will be jumped to after `mret` is called.
+pub struct Mepc;
+impl_csr_reg_rw!(Mepc, u64, "mepc");
+
+/// CSR register that holds info for handling interrupts
+pub struct Mscratch;
+impl_csr_reg_rw!(Mscratch, u64, "mscratch");
+
+/// CSR register that holds data to where to jump on interrupts / exceptions
+pub struct Mtvec;
+impl_csr_reg_rw!(Mtvec, u64, "mtvec");
+
+/// CSR register that holds machine-mode interrupt enable bits
+pub struct Mie;
+impl_csr_reg_rw!(Mie, u64, "mie");
+
+/// CSR register that stores information about which exceptions should be delegated to S-mode.
+pub struct Medeleg;
+impl_csr_reg_rw!(Medeleg, u64, "medeleg");
+
+/// CSR register that stores information about which interrupts should be delegated to S-mode.
+pub struct Mideleg;
+impl_csr_reg_rw!(Mideleg, u64, "mideleg");
+
+/// CSR register that contains the exception sepcific info on trap
+pub struct Mtval;
+impl_csr_reg_rw!(Mtval, u64, "mtval");
+
+/// CSR register that contains the cause of the exception
+pub struct Mcause;
+impl_csr_reg_rw!(Mcause, u64, "mcause");
+
+/// CSR register that contains information about paging.
+pub struct Satp;
+impl_csr_reg_rw!(Satp, u64, "satp");
+
+/// CSR register that contains the cause of the exception
+pub struct Scause;
+impl_csr_reg_rw!(Scause, u64, "scause");
+
+/// CSR register that stores info about the execution status of the current hart.
+pub struct Sstatus;
+impl_csr_reg_rw!(Sstatus, u64, "sstatus");
+
+/// CSR register that contains the exception sepcific info on trap
+pub struct Stval;
+impl_csr_reg_rw!(Stval, u64, "stval");
+
+/// CSR register that contains the trap handler address
+pub struct Stvec;
+impl_csr_reg_rw!(Stvec, u64, "stvec");
+
+/// CSR register that contains the address that created the exception
+pub struct Sepc;
+impl_csr_reg_rw!(Sepc, u64, "sepc");
+
+/// CSR register that stores interrupt enable bits (interrupt `i` will not be accepted unless Sie[i] is on)
+pub struct Sie;
+impl_csr_reg_rw!(Sie, u64, "sie");
+
+/// CSR register that stores information on pending interrupts.
+pub struct Sip;
+impl_csr_reg_rw!(Sip, u64, "sip");
+
+/// CSR for Physical Memory Protection.
+pub struct Pmpaddr0;
+impl_csr_reg_rw!(Pmpaddr0, u64, "pmpaddr0");
+
+/// CSR for configuring pmpaddr0,1,2,3,4,5,6,7
+pub struct Pmpcfg0;
+impl_csr_reg_rw!(Pmpcfg0, u64, "pmpcfg0");
+
+/// Data stored inside Mstatus[12:11]
+pub struct MstatusMpp;
+const MPP_MASK: u64 = 3u64 << 11;
+
+impl ReadFrom for MstatusMpp {
+    type Out = PrivLevel;
+    unsafe fn read(&self) -> Self::Out {
+        let mstatus = unsafe { Mstatus.read() };
+        let mpp = mstatus & MPP_MASK;
+        PrivLevel::try_from(mpp >> 11).unwrap()
+    }
+}
+
+impl WriteInto for MstatusMpp {
+    type In = PrivLevel;
+    unsafe fn write(&self, val: Self::In) {
+        let mut mstatus = unsafe { Mstatus.read() };
+        mstatus &= !MPP_MASK;
+        mstatus |= (val as u64) << 11;
+        unsafe { Mstatus.write(mstatus) };
+    }
+}
+
+/// Data stored inside Mstatus[3]
+pub struct MstatusMie;
+const MIE_MASK: u64 = 1 << 3;
+
+impl ReadFrom for MstatusMie {
+    type Out = bool;
+    unsafe fn read(&self) -> Self::Out {
+        let mstatus = unsafe { Mstatus.read() };
+        let mie = mstatus & MIE_MASK;
+        mie > 0
+    }
+}
+
+impl WriteInto for MstatusMie {
+    type In = bool;
+    unsafe fn write(&self, val: Self::In) {
+        let mut mstatus = unsafe { Mstatus.read() };
+        mstatus &= !MIE_MASK;
+        mstatus |= (val as u64) << 3;
+        unsafe { Mstatus.write(mstatus) };
+    }
+}
+
+
+use super::{ReadFrom, WriteInto};
+use crate::arch::common::privilage::PrivLevel;
+use core::arch::asm;
+
+macro_rules! impl_csr_reg_rw {
+    ($name:ident, $t:ty, $abi_name:literal) => {
+        impl WriteInto for $name {
+            type In = $t;
+            unsafe fn write(&self, val: Self::In) {
+                unsafe {asm!(concat!("csrw ", $abi_name, ", {x}"), x = in(reg) val)};
+            }
+        }
+
+        impl ReadFrom for $name {
+            type Out = $t;
+            unsafe fn read(&self, ) -> Self::Out {
+                let ret: $t;
+                unsafe {asm!(concat!("csrr {x}, ", $abi_name), x = out(reg) ret)};
+                ret
+            }
+        }
+    };
+}
+
+/// CSR register that stores info about the execution status of the current hart.
+pub struct Mstatus;
+impl_csr_reg_rw!(Mstatus, u64, "mstatus");
+
+/// CSR register that stores the id of the current executing hart.
+pub struct Mhartid;
+impl_csr_reg_rw!(Mhartid, u64, "mhartid");
+
+/// CSR register that holds the adress will be jumped to after `mret` is called.
+pub struct Mepc;
+impl_csr_reg_rw!(Mepc, u64, "mepc");
+
+/// CSR register that holds info for handling interrupts
+pub struct Mscratch;
+impl_csr_reg_rw!(Mscratch, u64, "mscratch");
+
+/// CSR register that holds data to where to jump on interrupts / exceptions
+pub struct Mtvec;
+impl_csr_reg_rw!(Mtvec, u64, "mtvec");
+
+/// CSR register that holds machine-mode interrupt enable bits
+pub struct Mie;
+impl_csr_reg_rw!(Mie, u64, "mie");
+
+/// CSR register that stores information about which exceptions should be delegated to S-mode.
+pub struct Medeleg;
+impl_csr_reg_rw!(Medeleg, u64, "medeleg");
+
+/// CSR register that stores information about which interrupts should be delegated to S-mode.
+pub struct Mideleg;
+impl_csr_reg_rw!(Mideleg, u64, "mideleg");
+
+/// CSR register that contains the exception sepcific info on trap
+pub struct Mtval;
+impl_csr_reg_rw!(Mtval, u64, "mtval");
+
+/// CSR register that contains the cause of the exception
+pub struct Mcause;
+impl_csr_reg_rw!(Mcause, u64, "mcause");
+
+/// CSR register that contains information about paging.
+pub struct Satp;
+impl_csr_reg_rw!(Satp, u64, "satp");
+
+/// CSR register that contains the cause of the exception
+pub struct Scause;
+impl_csr_reg_rw!(Scause, u64, "scause");
+
+/// CSR register that stores info about the execution status of the current hart.
+pub struct Sstatus;
+impl_csr_reg_rw!(Sstatus, u64, "sstatus");
+
+/// CSR register that contains the exception sepcific info on trap
+pub struct Stval;
+impl_csr_reg_rw!(Stval, u64, "stval");
+
+/// CSR register that contains the trap handler address
+pub struct Stvec;
+impl_csr_reg_rw!(Stvec, u64, "stvec");
+
+/// CSR register that contains the address that created the exception
+pub struct Sepc;
+impl_csr_reg_rw!(Sepc, u64, "sepc");
+
+/// CSR register that stores interrupt enable bits (interrupt `i` will not be accepted unless Sie[i] is on)
+pub struct Sie;
+impl_csr_reg_rw!(Sie, u64, "sie");
+
+/// CSR register that stores information on pending interrupts.
+pub struct Sip;
+impl_csr_reg_rw!(Sip, u64, "sip");
+
+/// CSR for Physical Memory Protection.
+pub struct Pmpaddr0;
+impl_csr_reg_rw!(Pmpaddr0, u64, "pmpaddr0");
+
+/// CSR for configuring pmpaddr0,1,2,3,4,5,6,7
+pub struct Pmpcfg0;
+impl_csr_reg_rw!(Pmpcfg0, u64, "pmpcfg0");
+
+/// Data stored inside Mstatus[12:11]
+pub struct MstatusMpp;
+const MPP_MASK: u64 = 3u64 << 11;
+
+impl ReadFrom for MstatusMpp {
+    type Out = PrivLevel;
+    unsafe fn read(&self) -> Self::Out {
+        let mstatus = unsafe { Mstatus.read() };
+        let mpp = mstatus & MPP_MASK;
+        PrivLevel::try_from(mpp >> 11).unwrap()
+    }
+}
+
+impl WriteInto for MstatusMpp {
+    type In = PrivLevel;
+    unsafe fn write(&self, val: Self::In) {
+        let mut mstatus = unsafe { Mstatus.read() };
+        mstatus &= !MPP_MASK;
+        mstatus |= (val as u64) << 11;
+        unsafe { Mstatus.write(mstatus) };
+    }
+}
+
+/// Data stored inside Mstatus[3]
+pub struct MstatusMie;
+const MIE_MASK: u64 = 1 << 3;
+
+impl ReadFrom for MstatusMie {
+    type Out = bool;
+    unsafe fn read(&self) -> Self::Out {
+        let mstatus = unsafe { Mstatus.read() };
+        let mie = mstatus & MIE_MASK;
+        mie > 0
+    }
+}
+
+impl WriteInto for MstatusMie {
+    type In = bool;
+    unsafe fn write(&self, val: Self::In) {
+        let mut mstatus = unsafe { Mstatus.read() };
+        mstatus &= !MIE_MASK;
+        mstatus |= (val as u64) << 3;
+        unsafe { Mstatus.write(mstatus) };
+    }
+}
+
+
+use super::{ReadFrom, WriteInto};
+use crate::arch::common::privilage::PrivLevel;
+use core::arch::asm;
+
+macro_rules! impl_csr_reg_rw {
+    ($name:ident, $t:ty, $abi_name:literal) => {
+        impl WriteInto for $name {
+            type In = $t;
+            unsafe fn write(&self, val: Self::In) {
+                unsafe {asm!(concat!("csrw ", $abi_name, ", {x}"), x = in(reg) val)};
+            }
+        }
+
+        impl ReadFrom for $name {
+            type Out = $t;
+            unsafe fn read(&self, ) -> Self::Out {
+                let ret: $t;
+                unsafe {asm!(concat!("csrr {x}, ", $abi_name), x = out(reg) ret)};
+                ret
+            }
+        }
+    };
+}
+
+/// CSR register that stores info about the execution status of the current hart.
+pub struct Mstatus;
+impl_csr_reg_rw!(Mstatus, u64, "mstatus");
+
+/// CSR register that stores the id of the current executing hart.
+pub struct Mhartid;
+impl_csr_reg_rw!(Mhartid, u64, "mhartid");
+
+/// CSR register that holds the adress will be jumped to after `mret` is called.
+pub struct Mepc;
+impl_csr_reg_rw!(Mepc, u64, "mepc");
+
+/// CSR register that holds info for handling interrupts
+pub struct Mscratch;
+impl_csr_reg_rw!(Mscratch, u64, "mscratch");
+
+/// CSR register that holds data to where to jump on interrupts / exceptions
+pub struct Mtvec;
+impl_csr_reg_rw!(Mtvec, u64, "mtvec");
+
+/// CSR register that holds machine-mode interrupt enable bits
+pub struct Mie;
+impl_csr_reg_rw!(Mie, u64, "mie");
+
+/// CSR register that stores information about which exceptions should be delegated to S-mode.
+pub struct Medeleg;
+impl_csr_reg_rw!(Medeleg, u64, "medeleg");
+
+/// CSR register that stores information about which interrupts should be delegated to S-mode.
+pub struct Mideleg;
+impl_csr_reg_rw!(Mideleg, u64, "mideleg");
+
+/// CSR register that contains the exception sepcific info on trap
+pub struct Mtval;
+impl_csr_reg_rw!(Mtval, u64, "mtval");
+
+/// CSR register that contains the cause of the exception
+pub struct Mcause;
+impl_csr_reg_rw!(Mcause, u64, "mcause");
+
+/// CSR register that contains information about paging.
+pub struct Satp;
+impl_csr_reg_rw!(Satp, u64, "satp");
+
+/// CSR register that contains the cause of the exception
+pub struct Scause;
+impl_csr_reg_rw!(Scause, u64, "scause");
+
+/// CSR register that stores info about the execution status of the current hart.
+pub struct Sstatus;
+impl_csr_reg_rw!(Sstatus, u64, "sstatus");
+
+/// CSR register that contains the exception sepcific info on trap
+pub struct Stval;
+impl_csr_reg_rw!(Stval, u64, "stval");
+
+/// CSR register that contains the trap handler address
+pub struct Stvec;
+impl_csr_reg_rw!(Stvec, u64, "stvec");
+
+/// CSR register that contains the address that created the exception
+pub struct Sepc;
+impl_csr_reg_rw!(Sepc, u64, "sepc");
+
+/// CSR register that stores interrupt enable bits (interrupt `i` will not be accepted unless Sie[i] is on)
+pub struct Sie;
+impl_csr_reg_rw!(Sie, u64, "sie");
+
+/// CSR register that stores information on pending interrupts.
+pub struct Sip;
+impl_csr_reg_rw!(Sip, u64, "sip");
+
+/// CSR for Physical Memory Protection.
+pub struct Pmpaddr0;
+impl_csr_reg_rw!(Pmpaddr0, u64, "pmpaddr0");
+
+/// CSR for configuring pmpaddr0,1,2,3,4,5,6,7
+pub struct Pmpcfg0;
+impl_csr_reg_rw!(Pmpcfg0, u64, "pmpcfg0");
+
+/// Data stored inside Mstatus[12:11]
+pub struct MstatusMpp;
+const MPP_MASK: u64 = 3u64 << 11;
+
+impl ReadFrom for MstatusMpp {
+    type Out = PrivLevel;
+    unsafe fn read(&self) -> Self::Out {
+        let mstatus = unsafe { Mstatus.read() };
+        let mpp = mstatus & MPP_MASK;
+        PrivLevel::try_from(mpp >> 11).unwrap()
+    }
+}
+
+impl WriteInto for MstatusMpp {
+    type In = PrivLevel;
+    unsafe fn write(&self, val: Self::In) {
+        let mut mstatus = unsafe { Mstatus.read() };
+        mstatus &= !MPP_MASK;
+        mstatus |= (val as u64) << 11;
+        unsafe { Mstatus.write(mstatus) };
+    }
+}
+
+/// Data stored inside Mstatus[3]
+pub struct MstatusMie;
+const MIE_MASK: u64 = 1 << 3;
+
+impl ReadFrom for MstatusMie {
+    type Out = bool;
+    unsafe fn read(&self) -> Self::Out {
+        let mstatus = unsafe { Mstatus.read() };
+        let mie = mstatus & MIE_MASK;
+        mie > 0
+    }
+}
+
+impl WriteInto for MstatusMie {
+    type In = bool;
+    unsafe fn write(&self, val: Self::In) {
+        let mut mstatus = unsafe { Mstatus.read() };
+        mstatus &= !MIE_MASK;
+        mstatus |= (val as u64) << 3;
+        unsafe { Mstatus.write(mstatus) };
+    }
+}

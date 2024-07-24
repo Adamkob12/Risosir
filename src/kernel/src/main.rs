@@ -9,7 +9,7 @@
 #![feature(riscv_ext_intrinsics)]
 
 use core::arch::asm;
-use core::arch::riscv64::wfi;
+use core::hint;
 use core::sync::atomic::Ordering;
 use core::{panic::PanicInfo, sync::atomic::AtomicBool};
 use kernel::arch::common::privilage::PrivLevel;
@@ -30,6 +30,8 @@ use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
 #[panic_handler]
 #[cfg(not(feature = "test-kernel"))]
 fn panic(info: &PanicInfo) -> ! {
+    use core::hint;
+
     unsafe {
         // UART.force_unlock();
         // CONSOLE.force_unlock();
@@ -57,7 +59,7 @@ fn panic(info: &PanicInfo) -> ! {
         info
     );
     loop {
-        unsafe { asm!("wfi") };
+        hint::spin_loop();
     }
 }
 
@@ -73,14 +75,14 @@ extern "C" fn main() -> ! {
         STARTED.store(true, Ordering::SeqCst);
     }
     while !STARTED.load(Ordering::SeqCst) {
-        unsafe { asm!("wfi") };
+        // unsafe { asm!("wfi") };
         // Wait for CPU #0 to set up the kernel properly
     }
     if STARTED.load(Ordering::SeqCst) {
         cprintln!("Hello from Hart #{}", hart_id);
 
         loop {
-            unsafe { asm!("wfi") };
+            hint::spin_loop();
         }
     } else {
         panic!("Something up with the ordering of instructions");
@@ -111,5 +113,4 @@ unsafe fn init_kernel(hart_id: u64) {
     Stvec.write(trap::kernelvec as u64);
     init_plic_global();
     init_plic_hart(hart_id, PrivLevel::S);
-    enable_interrupts();
 }

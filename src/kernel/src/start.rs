@@ -49,7 +49,7 @@ pub unsafe fn start() -> ! {
     );
     // Sie.write(Sie.read() | SIE_SEIE | SIE_SSIE);
     // Configure Physical Memory Protection to give supervisor mode access to all of physical memory.
-    Pmpaddr0.write(0xffffffffffffffff);
+    Pmpaddr0.write(0x3fffffffffffff);
     Pmpcfg0.write(0xf);
     // Save the hart id in TP because we won't have access to it outside of machine mode
     let hart_id = Mhartid.read();
