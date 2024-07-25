@@ -32,11 +32,11 @@ pub unsafe extern "C" fn kerneltrap() {
             // PLIC external interrupt
             if let Some(plic_dev_id) = plic_claim(hart_id, priv_lvl) {
                 match plic_dev_id {
-                    // UART_IRQ => UART.lock().interrupt(CONSOLE.lock(), KEYBOARD.lock()),
+                    UART_IRQ => UART.lock().interrupt(CONSOLE.lock(), KEYBOARD.lock()),
                     // UART_IRQ => {}
                     // VIRTIO0_IRQ => {}
                     id => {
-                        // panic!("PLIC interrupt for unrecognized devive: {id}");
+                        panic!("PLIC interrupt for unrecognized devive: {id}");
                     }
                 }
                 plic_complete(hart_id, priv_lvl, plic_dev_id);

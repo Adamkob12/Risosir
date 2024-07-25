@@ -12,8 +12,8 @@ use core::ascii;
 
 pub const NODE_MAGIC_NUMBER: u32 = 102030069;
 pub const FILE_MAGIC_NUMBER: u32 = 900000111;
-pub const MAX_FILES: usize = 1000;
-pub const NODES_OFFSET: usize = core::mem::size_of::<FileMeta>() * MAX_FILES;
+pub const MAX_FILES: usize = NODE_SIZE;
+pub const NODES_OFFSET: usize = size_of::<FileMeta>() * MAX_FILES;
 pub const FILE_NAME_LEN: usize = 18;
 pub const NODE_SIZE: usize = 1024;
 pub const FILE_DATA_SIZE: usize = NODE_SIZE - 16;

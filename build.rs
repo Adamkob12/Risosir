@@ -4,56 +4,16 @@
 
 use std::{
     ascii,
-    fs::{self, File, OpenOptions},
+    fs::{read_dir, File, OpenOptions},
     io::{ErrorKind, Read, Seek, SeekFrom, Write},
     mem,
     path::Path,
     slice,
 };
 
+use fs::*;
+
 const SHARED_FILES: &str = "shared_files";
-const NODE_MAGIC_NUMBER: u32 = 102030069;
-const FILE_MAGIC_NUMBER: u32 = 900000111;
-const MAX_FILES: usize = 1000;
-const NODES_OFFSET: usize = mem::size_of::<FileMeta>() * MAX_FILES;
-const FILE_NAME_LEN: usize = 18;
-const NODE_SIZE: usize = 1024;
-const FILE_DATA_SIZE: usize = NODE_SIZE - 16;
-/// The address of a node with some NodeId is: (NODES_OFFSET + size_of::<Node>() * NodeId)
-type NodeId = u32;
-type FileId = u16;
-// Must be 32 bytes
-#[repr(C)]
-struct FileMeta {
-    magic_number: u32,                  // 4 bytes, Always =FILE_MAGIC_NUMBER
-    node_list_start: NodeId,            // 4 bytes, the index of the node
-    file_id: FileId,                    // 2 bytes
-    name: [ascii::Char; FILE_NAME_LEN], // 18 bytes
-    size: u32,                          // 4 bytes, size in bytes
-}
-
-type FileData = [u8; FILE_DATA_SIZE];
-
-// Must be 1 KB exactly
-#[repr(C)]
-struct Node {
-    magic_number: u32, // 4 bytes, Always =NODE_MAGIC_NUMBER
-    file_id: FileId,   // 2 byte
-    flags: u16,        // 2 byte
-    next_node: NodeId, // 4 bytes
-    prev_node: NodeId, // 4 bytes
-    // metadata = 16 bytes
-    data: FileData,
-}
-
-const _: () = {
-    if core::mem::size_of::<Node>() != NODE_SIZE {
-        panic!()
-    }
-    if core::mem::size_of::<FileMeta>() != 32 {
-        panic!()
-    }
-};
 
 fn main() {
     println!("cargo:rustc-link-arg-bin=risosir=--script=src/kernel/kernel.ld");
@@ -65,7 +25,7 @@ fn main() {
         .open("a.txt")
         .unwrap();
     let shared_files = Path::new(SHARED_FILES);
-    let dir = fs::read_dir(shared_files).unwrap();
+    let dir = read_dir(shared_files).unwrap();
     let mut current_file_id: FileId = 1;
     let mut current_node_id: NodeId = 1;
     for entry in dir
@@ -92,7 +52,7 @@ fn main() {
 
         let first_node_id = current_node_id;
         let last_node_id = first_node_id + file_meta.size / FILE_DATA_SIZE as u32;
-        while true {
+        loop {
             let end = read_max(&mut shared_file, &mut file_data_buff).unwrap();
             let node = Node {
                 magic_number: NODE_MAGIC_NUMBER,

@@ -21,10 +21,13 @@ bench = false
 kernel = { path = "src/kernel" }
 
 [workspace]
-members = ["src/kernel"]
+members = ["src/fs", "src/kernel"]
 
 [dependencies]
 kernel = { workspace = true }
+
+[build-dependencies]
+fs = { path = "src/fs" }
 
 [features]
 test-kernel = ["kernel/test-kernel"]

@@ -31,6 +31,7 @@ pub mod start;
 pub mod trampoline;
 pub mod trap;
 pub mod uart;
+pub mod virtio;
 
 use arch::registers::{gpr::Tp, ReadFrom};
 pub use console::*;
@@ -55,6 +56,7 @@ pub fn end_of_kernel_data_section() -> usize {
 }
 
 /// *Doesn't Include* kernel's stack(s), only includes "text" memory section
+/// (includes trampoline)
 pub fn end_of_kernel_code_section() -> usize {
     etext as usize
 }

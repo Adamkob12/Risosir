@@ -25,6 +25,7 @@ use kernel::proc::init_procs;
 use kernel::trampoline::trampoline;
 use kernel::trap::{self, SupervisorInterrupt, _breakpoint, disable_interrupts, enable_interrupts};
 use kernel::uart::UART;
+use kernel::virtio::init_virtio;
 use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
 
 #[panic_handler]
@@ -102,6 +103,7 @@ unsafe fn init_kernel(hart_id: u64) {
     set_current_page_table(&KERNEL_PAGE_TABLE);
     cprintln!("Page Table has been initialized.");
     init_procs();
+    cprintln!("Page Table has been initialized.");
     // Enable S-mode software, external and timer interrupts
     Sie.write(
         Sie.read()
@@ -113,4 +115,5 @@ unsafe fn init_kernel(hart_id: u64) {
     Stvec.write(trap::kernelvec as u64);
     init_plic_global();
     init_plic_hart(hart_id, PrivLevel::S);
+    init_virtio();
 }
