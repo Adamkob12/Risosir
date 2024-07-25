@@ -22,6 +22,7 @@ pub type NodeId = u32;
 pub type FileId = u16;
 // Must be 32 bytes
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct FileMeta {
     pub magic_number: u32,                  // 4 bytes, Always =FILE_MAGIC_NUMBER
     pub node_list_start: NodeId,            // 4 bytes, the index of the node

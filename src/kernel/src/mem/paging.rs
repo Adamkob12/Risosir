@@ -12,7 +12,6 @@ use crate::{
     param::{PAGE_SIZE, RAM_SIZE},
     trampoline::trampoline,
 };
-use core::ptr::NonNull;
 
 /// The kernel L3 page table
 pub static mut KERNEL_PAGE_TABLE: PageTable = PageTable::empty();
@@ -55,7 +54,7 @@ pub unsafe fn set_current_page_table(pt: &'static PageTable) {
 
 /// Only call during bootup, from one thread only, call once
 pub unsafe fn init_kernel_page_table() {
-    #[cfg(feature = "debug-allocations")]
+    #[cfg(debug_assertions)]
     cprintln!("Mapping UART");
     // Map UART to the same address
     KERNEL_PAGE_TABLE.strong_map(
@@ -65,7 +64,7 @@ pub unsafe fn init_kernel_page_table() {
         PageTableLevel::L2,
     );
 
-    #[cfg(feature = "debug-allocations")]
+    #[cfg(debug_assertions)]
     cprintln!("Mapping VIRTIO MMIO");
     KERNEL_PAGE_TABLE.strong_map(
         VirtAddr::from_raw(VIRTIO0 as u64),
@@ -74,7 +73,7 @@ pub unsafe fn init_kernel_page_table() {
         PageTableLevel::L2,
     );
 
-    #[cfg(feature = "debug-allocations")]
+    #[cfg(debug_assertions)]
     cprintln!("Mapping PLIC");
     for addr in (PLIC..(PLIC + 0x0040_0000)).into_iter().step_by(PAGE_SIZE) {
         KERNEL_PAGE_TABLE.strong_map(
@@ -85,7 +84,7 @@ pub unsafe fn init_kernel_page_table() {
         );
     }
 
-    #[cfg(feature = "debug-allocations")]
+    #[cfg(debug_assertions)]
     cprintln!("Mapping Kernel Text (Source code)");
     // Map kernel source code (text section), leave space for trampoline
     for addr in (KERNEL_BASE_ADDR..(end_of_kernel_code_section() - PAGE_SIZE)).step_by(PAGE_SIZE) {
@@ -97,6 +96,12 @@ pub unsafe fn init_kernel_page_table() {
         );
     }
 
+    #[cfg(debug_assertions)]
+    cprintln!(
+        "Mapping Trampoline: {:#x} -> {:#x}",
+        TRAMPOLINE_VADDR,
+        trampoline as u64
+    );
     // Map trampoline page
     KERNEL_PAGE_TABLE.strong_map(
         VirtAddr::from_raw(TRAMPOLINE_VADDR as u64),
@@ -105,7 +110,7 @@ pub unsafe fn init_kernel_page_table() {
         PageTableLevel::L2,
     );
 
-    #[cfg(feature = "debug-allocations")]
+    #[cfg(debug_assertions)]
     cprintln!("Mapping Kernel Data (data + rodata sections)");
     // Map kernel source code (text section)
     for addr in (end_of_kernel_code_section()..end_of_kernel_data_section()).step_by(PAGE_SIZE) {
@@ -117,7 +122,7 @@ pub unsafe fn init_kernel_page_table() {
         );
     }
 
-    #[cfg(feature = "debug-allocations")]
+    #[cfg(debug_assertions)]
     cprintln!("Mapping CLINT");
     // Map CLINT
     KERNEL_PAGE_TABLE.strong_map(
@@ -145,7 +150,7 @@ pub unsafe fn init_kernel_page_table() {
         PageTableLevel::L2,
     );
 
-    #[cfg(feature = "debug-allocations")]
+    #[cfg(debug_assertions)]
     cprintln!("Mapping boot ROM");
     // Map boot ROM
     KERNEL_PAGE_TABLE.strong_map(
@@ -155,7 +160,7 @@ pub unsafe fn init_kernel_page_table() {
         PageTableLevel::L2,
     );
 
-    #[cfg(feature = "debug-allocations")]
+    #[cfg(debug_assertions)]
     cprintln!("Mapping Entire RAM");
     // Map the entire RAM 1 to 1 for the kernel
     for addr in (end_of_kernel_data_section()..(KERNEL_BASE_ADDR + RAM_SIZE - 20 * PAGE_SIZE))

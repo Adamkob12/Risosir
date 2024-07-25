@@ -11,6 +11,7 @@ use crate::{
     keyboard::{self, KEYBOARD},
     plic::{plic_claim, plic_complete},
     uart::{self, UART},
+    virtio::virtio_intr,
     CONSOLE,
 };
 use core::arch::asm;
@@ -26,17 +27,14 @@ pub unsafe extern "C" fn kerneltrap() {
     let priv_lvl = PrivLevel::S;
 
     if (scause & (1 << 63)) != 0 {
-        // cprintln!("scause: {:#b}", scause);
-        // It's an interrupt
         if (scause & 0xff) == 9 {
             // PLIC external interrupt
             if let Some(plic_dev_id) = plic_claim(hart_id, priv_lvl) {
                 match plic_dev_id {
                     UART_IRQ => UART.lock().interrupt(CONSOLE.lock(), KEYBOARD.lock()),
-                    // UART_IRQ => {}
-                    // VIRTIO0_IRQ => {}
+                    VIRTIO0_IRQ => virtio_intr(),
                     id => {
-                        panic!("PLIC interrupt for unrecognized devive: {id}");
+                        panic!("PLIC - Unrecognized interrupt: {id}");
                     }
                 }
                 plic_complete(hart_id, priv_lvl, plic_dev_id);

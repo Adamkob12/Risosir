@@ -22,7 +22,7 @@ pub const TIMER_INTERRUPT_INTERVAL: u64 = 1_000_000 * 10;
 pub type ProcId = u8;
 
 pub const PAGE_SIZE: usize = 4096;
-pub const PAGES_PER_STACK: usize = 25;
+pub const PAGES_PER_STACK: usize = 40;
 pub const STACK_SIZE: usize = PAGE_SIZE * PAGES_PER_STACK;
 
 pub const PAGES_PER_HEAP: usize = 1000;

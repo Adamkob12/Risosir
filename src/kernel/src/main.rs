@@ -5,28 +5,28 @@
 #![test_runner(kernel::test_runner)]
 #![no_std]
 #![no_main]
+#![feature(ascii_char)]
 #![feature(panic_info_message)]
-#![feature(riscv_ext_intrinsics)]
 
+use crate::fs::FILES;
 use core::arch::asm;
-use core::hint;
 use core::sync::atomic::Ordering;
+use core::{ascii, hint};
 use core::{panic::PanicInfo, sync::atomic::AtomicBool};
 use kernel::arch::common::privilage::PrivLevel;
 use kernel::arch::registers::csr::{Sie, Sstatus, Stvec};
 use kernel::arch::registers::WriteInto;
 use kernel::arch::registers::{gpr::Tp, ReadFrom};
 use kernel::console::init_console;
-use kernel::keyboard::{read_recent_input, KEYBOARD};
 use kernel::mem::init_kernel_allocator;
 use kernel::mem::paging::{init_kernel_page_table, set_current_page_table, KERNEL_PAGE_TABLE};
-use kernel::plic::{init_plic_global, init_plic_hart};
-use kernel::proc::init_procs;
 use kernel::trampoline::trampoline;
-use kernel::trap::{self, SupervisorInterrupt, _breakpoint, disable_interrupts, enable_interrupts};
+use kernel::trap::SupervisorInterrupt;
 use kernel::uart::UART;
-use kernel::virtio::init_virtio;
+use kernel::*;
 use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
+use trap::enable_interrupts;
+use virtio::try_read_from_disk;
 
 #[panic_handler]
 #[cfg(not(feature = "test-kernel"))]
@@ -93,17 +93,16 @@ extern "C" fn main() -> ! {
 /// Will be called when the kernel is booting, only from CPU#0
 #[allow(unsafe_op_in_unsafe_fn)]
 unsafe fn init_kernel(hart_id: u64) {
-    init_console();
+    console::init_console();
     cprintln!("\nBooting Kernel...");
     cprintln!("End of kernel code : {:#x}", end_of_kernel_code_section());
     cprintln!("Trampoline frame   : {:#x}", trampoline as u64);
     cprintln!("End of kernel data : {:#x}", end_of_kernel_data_section());
-    init_kernel_allocator();
-    init_kernel_page_table();
-    set_current_page_table(&KERNEL_PAGE_TABLE);
+    mem::init_kernel_allocator();
+    mem::paging::init_kernel_page_table();
+    mem::paging::set_current_page_table(&KERNEL_PAGE_TABLE);
     cprintln!("Page Table has been initialized.");
-    init_procs();
-    cprintln!("Page Table has been initialized.");
+    proc::init_procs();
     // Enable S-mode software, external and timer interrupts
     Sie.write(
         Sie.read()
@@ -113,7 +112,9 @@ unsafe fn init_kernel(hart_id: u64) {
     );
     // Init kernel trap handler
     Stvec.write(trap::kernelvec as u64);
-    init_plic_global();
-    init_plic_hart(hart_id, PrivLevel::S);
-    init_virtio();
+    plic::init_plic_global();
+    plic::init_plic_hart(hart_id, PrivLevel::S);
+    virtio::init_virtio();
+    fs::init_files();
+    FILES.lock().ls();
 }

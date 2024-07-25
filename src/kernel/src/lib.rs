@@ -1,6 +1,7 @@
 #![feature(asm_const)]
 #![allow(static_mut_refs)]
 #![feature(naked_functions)]
+#![feature(new_uninit)]
 #![feature(fn_align)]
 #![feature(panic_info_message)]
 #![feature(ascii_char)]

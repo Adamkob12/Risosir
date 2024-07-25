@@ -22,7 +22,7 @@ fn main() {
         .read(true)
         .write(true)
         .truncate(true)
-        .open("a.txt")
+        .open("fs.img")
         .unwrap();
     let shared_files = Path::new(SHARED_FILES);
     let dir = read_dir(shared_files).unwrap();
