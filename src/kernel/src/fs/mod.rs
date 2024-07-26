@@ -3,10 +3,11 @@ use core::{
     mem::{transmute, MaybeUninit},
 };
 
+use alloc::boxed::Box;
 pub use fs::*;
 use spin::Mutex;
 
-use crate::{cprint, cprintln, virtio::try_read_from_disk};
+use crate::{cprint, cprintln, mem::paging::Frame, param::PAGE_SIZE, virtio::try_read_from_disk};
 
 #[repr(transparent)]
 pub struct FileTable([FileMeta; MAX_FILES]);
@@ -47,4 +48,31 @@ impl FileTable {
             cprintln!("\t{}", file_meta.size);
         }
     }
+
+    /// Copy the entire file data to ram, returning a slice of contigous Physical
+    /// Frames that contain the file data.
+    pub fn copy_to_ram(&self, file_name: &str) -> Option<Box<[u8]>> {
+        let file_name_ascii = file_name.as_ascii()?;
+        let file_meta = self
+            .0
+            .iter()
+            .find(|fm| strcmp_ascii(file_name_ascii, fm.name))?;
+        let mut file_data_heap = Box::<[u8]>::new_zeroed_slice(file_meta.size as usize);
+        let mut current_node_id = file_meta.node_list_start;
+
+        todo!()
+    }
+}
+
+fn read_node(buf: &mut Node, node_id: u32) {
+    todo!()
+}
+
+fn strcmp_ascii<const N: usize>(s: &[ascii::Char], ass: [ascii::Char; N]) -> bool {
+    for i in 0..N {
+        if *s.get(i).unwrap_or(&ascii::Char::from_u8(0).unwrap()) != ass[i] {
+            return false;
+        }
+    }
+    true
 }

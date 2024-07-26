@@ -24,6 +24,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e763eef8846b13b380f37dfecda401770b0ca4e56e95170237bd7c25c7db3582"
 
 [[package]]
+name = "elf"
+version = "0.7.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4445909572dbd556c457c849c4ca58623d84b27c8fff1e74b0b4227d8b90d17b"
+
+[[package]]
 name = "fs"
 version = "0.1.0"
 
@@ -32,6 +38,7 @@ name = "kernel"
 version = "0.1.0"
 dependencies = [
  "conquer-once",
+ "elf",
  "fs",
  "linked_list_allocator",
  "spin",
@@ -83,4 +90,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b9eb1a2f4c41445a3a0ff9abc5221c5fcd28e1f13cd7c0397706f9ac938ddb0"
 dependencies = [
  "lock_api",
+]
+
+[[package]]
+name = "user"
+version = "0.1.0"
+dependencies = [
+ "kernel",
 ]

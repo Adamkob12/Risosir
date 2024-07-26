@@ -1,0 +1,12 @@
+[package]
+name = "user"
+edition = "2021"
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+kernel = { path = "../kernel", features = ["ulib"] }
+
+[[bin]]
+path = "src/bin/ls.rs"
+name = "ls"

@@ -21,7 +21,7 @@ bench = false
 kernel = { path = "src/kernel" }
 
 [workspace]
-members = ["src/fs", "src/kernel"]
+members = ["src/fs", "src/kernel", "src/user"]
 
 [dependencies]
 kernel = { workspace = true }

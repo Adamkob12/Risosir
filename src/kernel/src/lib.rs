@@ -9,6 +9,41 @@
 #![no_std]
 #![no_main]
 
+#[panic_handler]
+fn panic(info: &PanicInfo) -> ! {
+    use core::hint;
+
+    unsafe {
+        // UART.force_unlock();
+        // CONSOLE.force_unlock();
+        let mut uart = UART.lock();
+
+        uart.write_chars(b"\nPANIC: ");
+        if let Some(msg) = info.message().as_str() {
+            uart.write_chars(msg.as_bytes());
+        } else {
+            uart.write_chars(b"X");
+        }
+        uart.write_chars(b"\nFILE: ");
+        uart.write_chars(info.location().unwrap().file().as_bytes());
+        uart.write_chars(b"\nLINE: ");
+        let mut line = info.location().unwrap().line();
+        while line != 0 {
+            uart.put_char((line % 10) as u8 + 48);
+            line /= 10;
+        }
+        uart.put_char(b'\n');
+    };
+    cprintln!(
+        "Encountered Panic (tp={}): {:#}",
+        unsafe { Tp.read() },
+        info
+    );
+    loop {
+        hint::spin_loop();
+    }
+}
+
 pub const TESTS: &[&dyn Test] = &[&trivial_test];
 
 fn trivial_test() {
@@ -38,6 +73,7 @@ use arch::registers::{gpr::Tp, ReadFrom};
 pub use console::*;
 use core::{
     arch::asm,
+    panic::PanicInfo,
     sync::atomic::{AtomicBool, Ordering},
 };
 use mem::{
@@ -45,6 +81,7 @@ use mem::{
     paging::{init_kernel_page_table, set_current_page_table, KERNEL_PAGE_TABLE},
 };
 use proc::init_procs;
+use uart::UART;
 
 extern "C" {
     fn end();
@@ -60,41 +97,6 @@ pub fn end_of_kernel_data_section() -> usize {
 /// (includes trampoline)
 pub fn end_of_kernel_code_section() -> usize {
     etext as usize
-}
-
-#[panic_handler]
-#[cfg(feature = "test-kernel")]
-fn panic(info: &core::panic::PanicInfo) -> ! {
-    use uart::UART;
-
-    unsafe {
-        // UART.force_unlock();
-        // CONSOLE.force_unlock();
-        let mut uart = UART.lock();
-        uart.write_chars(b"[TEST FAILED]");
-        if let Some(msg) = info.message().as_str() {
-            uart.write_chars(msg.as_bytes());
-        } else {
-            uart.write_chars(b"X");
-        }
-        uart.write_chars(b"\nFILE: ");
-        uart.write_chars(info.location().unwrap().file().as_bytes());
-        uart.write_chars(b"\nLINE: ");
-        let mut line = info.location().unwrap().line();
-        while line != 0 {
-            uart.put_char((line % 10) as u8 + 48);
-            line /= 10;
-        }
-        uart.put_char(b'\n');
-    };
-    cprintln!(
-        "Encountered Panic (tp={}): {:#}",
-        unsafe { Tp.read() },
-        info
-    );
-    loop {
-        unsafe { asm!("wfi") };
-    }
 }
 
 static STARTED: AtomicBool = AtomicBool::new(false);

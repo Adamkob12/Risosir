@@ -28,42 +28,6 @@ use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
 use trap::enable_interrupts;
 use virtio::try_read_from_disk;
 
-#[panic_handler]
-#[cfg(not(feature = "test-kernel"))]
-fn panic(info: &PanicInfo) -> ! {
-    use core::hint;
-
-    unsafe {
-        // UART.force_unlock();
-        // CONSOLE.force_unlock();
-        let mut uart = UART.lock();
-
-        uart.write_chars(b"\nPANIC: ");
-        if let Some(msg) = info.message().as_str() {
-            uart.write_chars(msg.as_bytes());
-        } else {
-            uart.write_chars(b"X");
-        }
-        uart.write_chars(b"\nFILE: ");
-        uart.write_chars(info.location().unwrap().file().as_bytes());
-        uart.write_chars(b"\nLINE: ");
-        let mut line = info.location().unwrap().line();
-        while line != 0 {
-            uart.put_char((line % 10) as u8 + 48);
-            line /= 10;
-        }
-        uart.put_char(b'\n');
-    };
-    cprintln!(
-        "Encountered Panic (tp={}): {:#}",
-        unsafe { Tp.read() },
-        info
-    );
-    loop {
-        hint::spin_loop();
-    }
-}
-
 static STARTED: AtomicBool = AtomicBool::new(false);
 
 #[export_name = "main"]
@@ -116,5 +80,4 @@ unsafe fn init_kernel(hart_id: u64) {
     plic::init_plic_hart(hart_id, PrivLevel::S);
     virtio::init_virtio();
     fs::init_files();
-    FILES.lock().ls();
 }

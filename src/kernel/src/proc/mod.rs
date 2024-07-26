@@ -23,6 +23,7 @@ pub enum ProcStatus {
     Inactive = 0,
     Active = 1,
     Running = 2,
+    Runnable = 3,
 }
 
 pub struct AtomicProcStatus(AtomicUsize);
@@ -94,7 +95,6 @@ pub struct ProcContext<'p> {
     program_counter: u64,
     heap_start: u64,
     heap_size: u64,
-    trapframe: &'p mut Trapframe,
     page_table: &'p PageTable,
 }
 
@@ -194,7 +194,6 @@ impl<'a> Process<'a> {
             program_counter,
             heap_start,
             heap_size: HEAP_SIZE as u64,
-            trapframe: unsafe { transmute(TRAPFRAME_VADDR) },
             page_table: pt,
         })
     }

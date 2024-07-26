@@ -58,20 +58,6 @@ pub unsafe fn alloc_frame() -> Option<NonNull<Frame>> {
         })
 }
 
-pub unsafe fn alloc_frames<const N: usize>() -> Option<NonNull<[Frame; N]>> {
-    ALLOCATOR
-        .lock()
-        .allocate_first_fit(Layout::array::<Frame>(N).ok()?)
-        .ok()
-        .map(|p| {
-            let p = p.cast();
-            p.write(garbage_frames());
-            #[cfg(feature = "debug-allocations")]
-            crate::cprintln!("Allocated a {N} Frames array at {:#x}", p.as_ptr() as usize);
-            p
-        })
-}
-
 #[cfg(feature = "debug-allocations")]
 unsafe impl core::alloc::GlobalAlloc for DebugAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
