@@ -1,10 +1,10 @@
 use crate::arch::{
-        common::privilage::PrivLevel,
-        memlayout::{
-            PLIC_CLAIM_BASE, PLIC_CLAIM_THRESHOLD, PLIC_ENABLE_BASE, PLIC_PRIORITY_BASE, UART_IRQ,
-            VIRTIO0_IRQ,
-        },
-    };
+    common::privilage::PrivLevel,
+    memlayout::{
+        PLIC_CLAIM_BASE, PLIC_CLAIM_THRESHOLD, PLIC_ENABLE_BASE, PLIC_PRIORITY_BASE, UART_IRQ,
+        VIRTIO0_IRQ,
+    },
+};
 
 const fn plic_priority(source_id: usize) -> *mut u32 {
     (PLIC_PRIORITY_BASE + source_id * 4) as *mut u32
@@ -31,7 +31,7 @@ fn context_id(hart_id: u64, privilage: PrivLevel) -> u64 {
 pub fn init_plic_global() {
     // Set the priority of the UART and VIRTIO to 1
     unsafe {
-        // plic_priority(UART_IRQ).write_volatile(1);
+        plic_priority(UART_IRQ).write_volatile(1);
         plic_priority(VIRTIO0_IRQ).write_volatile(1);
     };
 }

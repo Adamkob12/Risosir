@@ -4,10 +4,12 @@ pub mod interrupt;
 use crate::{
     arch::{
         common::privilage::PrivLevel,
-        memlayout::VIRTIO0_IRQ,
+        memlayout::{UART_IRQ, VIRTIO0_IRQ},
         registers::{gpr::Tp, WriteInto},
-    }, cprintln,
+    },
+    cprintln,
     plic::{plic_claim, plic_complete},
+    uart::uart_interrupt,
     virtio::virtio_intr,
 };
 use core::arch::asm;
@@ -28,7 +30,7 @@ pub unsafe extern "C" fn kerneltrap() {
             if let Some(plic_dev_id) = plic_claim(hart_id, priv_lvl) {
                 match plic_dev_id {
                     VIRTIO0_IRQ => virtio_intr(),
-                    // UART_IRQ => uart_interrupt(),
+                    UART_IRQ => uart_interrupt(),
                     id => {
                         panic!("PLIC - Unrecognized interrupt: {id}");
                     }

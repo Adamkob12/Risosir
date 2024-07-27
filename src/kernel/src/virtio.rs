@@ -1,8 +1,7 @@
-use core::{mem::MaybeUninit, sync::atomic::fence};
-
 use crate::{arch::memlayout::VIRTIO0, cprintln};
 use alloc::boxed::Box;
 use conquer_once::spin::OnceCell;
+use core::{arch::riscv64::wfi, mem::MaybeUninit, sync::atomic::fence};
 use spin::Mutex;
 
 //
@@ -11,7 +10,7 @@ use spin::Mutex;
 //
 
 /// The capacity (refered to as `QueueNum` in the spec) of the virtqueue.
-pub const VIRTQ_CAP: usize = 60;
+pub const VIRTQ_CAP: usize = 8;
 
 pub const SECTOR_SIZE: usize = 512;
 
@@ -103,7 +102,7 @@ pub struct VirtioDisk {
     /// Indexed by idx % VIRTQ_CAP, is the desc free to use?
     free_desc: [bool; VIRTQ_CAP],
     req_placeholder: [MaybeUninit<VirtioBlkReq>; VIRTQ_CAP],
-    statuses: [u8; VIRTQ_CAP],
+    // statuses: [u8; VIRTQ_CAP],
     used_idxs: u16,
 }
 
@@ -246,7 +245,7 @@ pub fn init_virtio() {
                 used_ring,
                 free_desc: [true; VIRTQ_CAP],
                 req_placeholder: [MaybeUninit::zeroed(); VIRTQ_CAP],
-                statuses: [0; VIRTQ_CAP],
+                // statuses: [0; VIRTQ_CAP],
                 used_idxs: 0,
             })
         });
@@ -281,71 +280,97 @@ impl VirtioDisk {
     }
 }
 
-pub fn read_from_disk(sector: u64, data: &mut [u8; 1024]) -> Result<(), ()> {
-    let mut disk = DISK.get().unwrap().lock();
-    let desc_id1 = disk.alloc_desc().ok_or(())?;
-    let desc_id2 = disk.alloc_desc().ok_or(())?;
-    let desc_id3 = disk.alloc_desc().ok_or(())?;
+pub fn read_from_disk(sector: u64, data: &mut [u8; 1024]) -> Result<(), u8> {
+    let status: u8 = 0xff;
+    let status_addr: u64 = (&status) as *const _ as u64;
+    let head_desc_chain = {
+        let mut disk = DISK.get().unwrap().lock();
+        let desc_id1 = disk.alloc_desc().ok_or(0)?;
+        let desc_id2 = disk.alloc_desc().ok_or(0)?;
+        let desc_id3 = disk.alloc_desc().ok_or(0)?;
 
-    disk.statuses[desc_id1 as usize] = 0xff;
-    let status_addr: u64 = (&disk.statuses[desc_id1 as usize]) as *const _ as u64;
-    let req = &mut disk.req_placeholder[desc_id1 as usize];
-    let req_addr = req.write(VirtioBlkReq {
-        ty: VIRTIO_BLK_T_IN,
-        _reserved: 0,
-        sector,
-    }) as *mut _ as u64;
+        // disk.statuses[desc_id1 as usize] = 0xff;
+        // let status_addr: u64 = (&disk.statuses[desc_id1 as usize]) as *const _ as u64;
 
-    // The first descriptor - the header, it describes the first of the chain
-    let desc1 = &mut disk.desc_table[desc_id1 as usize];
-    desc1.addr = req_addr;
-    desc1.len = size_of::<VirtioBlkReq>() as u32;
-    desc1.flags = VIRTQ_DESC_F_NEXT;
-    desc1.next = desc_id2;
+        let req = &mut disk.req_placeholder[desc_id1 as usize];
+        let req_addr = req.write(VirtioBlkReq {
+            ty: VIRTIO_BLK_T_IN,
+            _reserved: 0,
+            sector,
+        }) as *mut _ as u64;
 
-    // The second descriptor - this descriptor defines the data buffer
-    let desc2 = &mut disk.desc_table[desc_id2 as usize];
-    desc2.addr = data as *mut _ as u64;
-    desc2.len = data.len() as u32;
-    desc2.flags = VIRTQ_DESC_F_NEXT | VIRTQ_DESC_F_WRITE;
-    desc2.next = desc_id3;
+        // The first descriptor - the header, it describes the first of the chain
+        let desc1 = &mut disk.desc_table[desc_id1 as usize];
+        desc1.addr = req_addr;
+        desc1.len = size_of::<VirtioBlkReq>() as u32;
+        desc1.flags = VIRTQ_DESC_F_NEXT;
+        desc1.next = desc_id2;
 
-    // The third buffer - this descriptor defines a 1 byte buffer that the device
-    // will write the status of the operation after it ends
-    let desc3 = &mut disk.desc_table[desc_id3 as usize];
-    desc3.addr = status_addr;
-    desc3.len = 1;
-    desc3.flags = VIRTQ_DESC_F_WRITE;
+        // The second descriptor - this descriptor defines the data buffer
+        let desc2 = &mut disk.desc_table[desc_id2 as usize];
+        desc2.addr = data as *mut _ as u64;
+        desc2.len = data.len() as u32;
+        desc2.flags = VIRTQ_DESC_F_NEXT | VIRTQ_DESC_F_WRITE;
+        desc2.next = desc_id3;
 
-    let idx = disk.avail_ring.idx as usize % VIRTQ_CAP;
-    disk.avail_ring.ring[idx] = desc_id1;
+        // The third buffer - this descriptor defines a 1 byte buffer that the device
+        // will write the status of the operation after it ends
+        let desc3 = &mut disk.desc_table[desc_id3 as usize];
+        desc3.addr = status_addr;
+        desc3.len = 1;
+        desc3.flags = VIRTQ_DESC_F_WRITE;
 
-    fence(core::sync::atomic::Ordering::SeqCst);
+        let idx = disk.avail_ring.idx as usize % VIRTQ_CAP;
+        disk.avail_ring.ring[idx] = desc_id1;
 
-    disk.avail_ring.idx += 1;
+        fence(core::sync::atomic::Ordering::SeqCst);
 
-    fence(core::sync::atomic::Ordering::SeqCst);
+        disk.avail_ring.idx += 1;
 
-    w_virtio_register::<VIRTIO_MMIO_QUEUE_NOTIFY>(0); // 0 is the index of the only queue
+        fence(core::sync::atomic::Ordering::SeqCst);
 
-    Ok(())
+        w_virtio_register::<VIRTIO_MMIO_QUEUE_NOTIFY>(0); // 0 is the index of the only queue
+
+        desc_id1
+    };
+
+    loop {
+        match status {
+            0xff => continue,
+            s => {
+                let mut disk = DISK.get().unwrap().lock();
+                disk.free_desc_chain(head_desc_chain);
+
+                if s != 0 {
+                    return Err(s);
+                } else {
+                    return Ok(());
+                }
+            }
+        }
+    }
 }
 
 pub fn virtio_intr() {
     let mut disk = DISK.get().unwrap().lock();
 
     w_virtio_register::<VIRTIO_MMIO_INTERRUPT_ACK>(
-        r_virtio_register::<VIRTIO_MMIO_INTERRUPT_STATUS>(),
+        r_virtio_register::<VIRTIO_MMIO_INTERRUPT_STATUS>() & 0x3,
     );
-    // cprintln!("virtio intr");
+    cprintln!("virtio intr");
+
+    fence(core::sync::atomic::Ordering::SeqCst);
+
     let mut current_idx = disk.used_idxs;
     while current_idx < disk.used_ring.idx {
-        let head_desc_id = disk.used_ring.ring[current_idx as usize % VIRTQ_CAP].desc_id as u16;
-        match disk.statuses[head_desc_id as usize] {
-            0 => {}
-            err => panic!("Disk operation resulted in error - Status: {}", err),
-        }
-        disk.free_desc_chain(head_desc_id);
+        fence(core::sync::atomic::Ordering::SeqCst);
+        cprintln!("Current idx: {}", current_idx);
+        // let head_desc_id = disk.used_ring.ring[current_idx as usize % VIRTQ_CAP].desc_id as u16;
+        // match disk.statuses[head_desc_id as usize] {
+        //     0 => {}
+        //     err => panic!("Disk operation resulted in error - Status: {}", err),
+        // }
+        // disk.free_desc_chain(head_desc_id);
         //
         current_idx += 1;
     }

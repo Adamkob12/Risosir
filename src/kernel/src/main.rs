@@ -10,18 +10,15 @@
 
 use crate::fs::FILES;
 use core::hint;
+use core::sync::atomic::AtomicBool;
 use core::sync::atomic::{fence, Ordering};
-use core::{panic::PanicInfo, sync::atomic::AtomicBool};
 use kernel::arch::common::privilage::PrivLevel;
-use kernel::arch::registers::csr::{Sie, Sstatus, Stvec};
+use kernel::arch::registers::csr::{Sie, Stvec};
 use kernel::arch::registers::WriteInto;
 use kernel::arch::registers::{gpr::Tp, ReadFrom};
-use kernel::console::init_console;
-use kernel::mem::init_kernel_allocator;
-use kernel::mem::paging::{init_kernel_page_table, set_current_page_table, KERNEL_PAGE_TABLE};
+use kernel::mem::paging::KERNEL_PAGE_TABLE;
 use kernel::trampoline::trampoline;
 use kernel::trap::SupervisorInterrupt;
-use kernel::uart::UART;
 use kernel::*;
 use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
 use trap::enable_interrupts;
@@ -84,6 +81,6 @@ unsafe fn init_kernel(hart_id: u64) {
     enable_interrupts();
     fence(Ordering::SeqCst);
 
-    FILES.lock().debug_file("ls");
-    FILES.lock().cat("ls");
+    // FILES.lock().debug_file("ls");
+    FILES.lock().cat("console.txt");
 }

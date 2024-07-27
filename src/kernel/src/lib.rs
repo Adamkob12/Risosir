@@ -6,6 +6,7 @@
 #![feature(panic_info_message)]
 #![feature(ascii_char)]
 #![feature(ascii_char_variants)]
+#![feature(riscv_ext_intrinsics)]
 #![no_std]
 #![no_main]
 

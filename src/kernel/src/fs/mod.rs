@@ -20,9 +20,6 @@ pub fn init_files() {
     let mut files = FILES.lock();
     let mut buff = [0; 1024];
     read_from_disk(0, &mut buff).unwrap();
-    for _ in 0..10_000 {
-        // Wait untill the data is read from the disk
-    }
     let file_buff: [FileMeta; const { 1024 / size_of::<FileMeta>() }] = unsafe { transmute(buff) };
     (&mut files.0[0..(1024 / size_of::<FileMeta>())]).copy_from_slice(&file_buff);
 }
@@ -108,7 +105,6 @@ fn read_node(buf: &mut Node, node_id: u32) {
     //     for _ in 0..100_000 {}
     // }
     read_from_disk(node_sector as u64, unsafe { transmute(&mut *buf) }).unwrap();
-    for _ in 0..100_000 {}
     assert_eq!(buf.magic_number, NODE_MAGIC_NUMBER);
 }
 
