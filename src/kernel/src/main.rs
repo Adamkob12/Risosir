@@ -97,18 +97,4 @@ unsafe fn init_kernel(hart_id: u64) {
         let mut ls_proc = procs[ls_proc_id].lock();
         ls_proc.activate(ls_exe);
     }
-    // run_proc(ls_proc_id);
 }
-
-// unsafe fn run_proc(pid: ProcId) {
-//     if let Some(proc_context) = &(PROCS.get().unwrap().get(pid as usize).unwrap())
-//         .lock()
-//         .context
-//     {
-//         Sstatus.write(Sstatus.read() & !(PrivLevel::U as u64));
-//         Sepc.write(proc_context.program_counter);
-//         mem::paging::set_current_page_table(proc_context.page_table);
-
-//         asm!("sret");
-//     }
-// }

@@ -25,9 +25,8 @@ use spin::{Mutex, RwLock};
 pub enum ProcStatus {
     Unused = 0,
     Inactive = 1,
-    Active = 2,
-    Runnable = 3,
-    Running = 4,
+    Runnable = 2,
+    Running = 3,
 }
 
 pub struct AtomicProcStatus(AtomicUsize);
@@ -72,7 +71,6 @@ impl<'a> Process<'a> {
     }
 
     pub fn activate(&mut self, exe: ParsedExecutable<'a>) {
-        self.status.store(ProcStatus::Active, Ordering::Relaxed);
         let pt = Box::leak(Box::new(PageTable::zeroed()));
         // The program counter needs to start at the start of the code section
         let program_counter = exe.entry_point as u64;
@@ -174,6 +172,7 @@ impl<'a> Process<'a> {
             program_counter,
             page_table: pt,
         });
+        self.status.store(ProcStatus::Runnable, Ordering::Relaxed);
     }
 }
 
