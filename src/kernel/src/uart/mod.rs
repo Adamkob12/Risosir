@@ -1,9 +1,13 @@
-use core::fmt::Write;
+use core::{ascii, fmt::Write};
 
 use crate::{
-    arch::memlayout::UART_BASE_ADDR,
+    arch::{
+        memlayout::UART_BASE_ADDR,
+        registers::{csr::Sstatus, ReadFrom, WriteInto},
+    },
+    cprint, cprintln,
     keyboard::{Keyboard, KEYBOARD},
-    Console,
+    Console, CONSOLE,
 };
 use alloc::format;
 use spin::{Mutex, MutexGuard};
@@ -29,8 +33,12 @@ const DLL: u8 = 0;
 const DLM: u8 = 1;
 /// Uart FCR register, write-only
 const FCR: u8 = 2;
+/// Uart ISR register, read-only
+const ISR: u8 = 2;
 /// Uart THR register, only available when DLAB is off
 pub const THR: u8 = 0;
+/// Uart RHR register, only available when DLAB is off
+pub const RHR: u8 = 0;
 
 pub static UART: Mutex<Uart> = Mutex::new(Uart {
     base_addr: UART_BASE_ADDR,
@@ -79,7 +87,7 @@ impl Uart {
 
     pub unsafe fn get_next(&mut self) -> Option<u8> {
         (self.read_register::<LSR>() & LSR_RHR_READY_BIT == 1)
-            .then_some(self.read_register::<THR>())
+            .then_some(self.read_register::<RHR>())
     }
 
     /// Read any pending data from the console, if the buffer ever becomes full, this function will wait until its free.
@@ -98,29 +106,32 @@ impl Uart {
     /// then it returns and *only* continues after the uart interrupts and requests more data.
     pub fn async_send_pending(&mut self, console: &mut Console) {
         unsafe {
-            while self.read_register::<LSR>() & LSR_THR_EMPTY_BIT == 1 {
+            loop {
+                if (self.read_register::<LSR>() & LSR_THR_EMPTY_BIT) == 0 {
+                    return;
+                }
                 if let Some(char) = console.read_next() {
                     self.write_to_register::<THR>(char as u8);
-                } else {
-                    break;
                 }
             }
         }
     }
+}
 
-    pub fn interrupt(
-        &mut self,
-        mut console: MutexGuard<Console>,
-        mut keyboard: MutexGuard<Keyboard>,
-    ) {
-        // loop {}
-        while let Some(key) = unsafe { self.get_next() } {
-            console.write_str(&format!("Found Key: {}", key));
-            self.sync_send_pending(&mut console);
-            if keyboard.update_new_press(key).is_err() {
-                break;
-            }
+pub fn uart_interrupt() {
+    let mut console = CONSOLE.lock();
+    let mut uart = UART.lock();
+    // let mut kb = KEYBOARD.lock();
+    let isr = unsafe { uart.read_register::<ISR>() };
+    {
+        while let Some(key) = unsafe { uart.get_next() } {
+            console
+                .write_char(ascii::Char::from_u8(key).unwrap())
+                .unwrap();
+            // if kb.update_new_press(key).is_err() {
+            //     break;
+            // }
         }
-        self.async_send_pending(&mut *console);
     }
+    uart.sync_send_pending(&mut *console);
 }

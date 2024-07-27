@@ -10,7 +10,7 @@
 
 use crate::fs::FILES;
 use core::arch::asm;
-use core::sync::atomic::Ordering;
+use core::sync::atomic::{fence, Ordering};
 use core::{ascii, hint};
 use core::{panic::PanicInfo, sync::atomic::AtomicBool};
 use kernel::arch::common::privilage::PrivLevel;
@@ -25,8 +25,9 @@ use kernel::trap::SupervisorInterrupt;
 use kernel::uart::UART;
 use kernel::*;
 use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
+use keyboard::read_recent_input;
 use trap::enable_interrupts;
-use virtio::try_read_from_disk;
+use virtio::read_from_disk;
 
 static STARTED: AtomicBool = AtomicBool::new(false);
 
@@ -38,13 +39,14 @@ extern "C" fn main() -> ! {
         unsafe { init_kernel(hart_id) };
         // The kernel has officially booted
         STARTED.store(true, Ordering::SeqCst);
-    }
-    while !STARTED.load(Ordering::SeqCst) {
-        // unsafe { asm!("wfi") };
-        // Wait for CPU #0 to set up the kernel properly
+    } else {
+        while !STARTED.load(Ordering::SeqCst) {
+            // unsafe { asm!("wfi") };
+            // Wait for CPU #0 to set up the kernel properly
+        }
     }
     if STARTED.load(Ordering::SeqCst) {
-        cprintln!("Hello from Hart #{}", hart_id);
+        cprintln!("Hello from CPU #{}", hart_id);
 
         loop {
             hint::spin_loop();
@@ -80,4 +82,11 @@ unsafe fn init_kernel(hart_id: u64) {
     plic::init_plic_hart(hart_id, PrivLevel::S);
     virtio::init_virtio();
     fs::init_files();
+
+    fence(Ordering::SeqCst);
+    enable_interrupts();
+    fence(Ordering::SeqCst);
+
+    // FILES.lock().debug_file("ls");
+    // FILES.lock().cat("ls");
 }

@@ -13,27 +13,28 @@
 fn panic(info: &PanicInfo) -> ! {
     use core::hint;
 
-    unsafe {
-        // UART.force_unlock();
-        // CONSOLE.force_unlock();
-        let mut uart = UART.lock();
+    // unsafe {
+    //     UART.force_unlock();
+    //     CONSOLE.force_unlock();
+    //     let mut uart = UART.lock();
 
-        uart.write_chars(b"\nPANIC: ");
-        if let Some(msg) = info.message().as_str() {
-            uart.write_chars(msg.as_bytes());
-        } else {
-            uart.write_chars(b"X");
-        }
-        uart.write_chars(b"\nFILE: ");
-        uart.write_chars(info.location().unwrap().file().as_bytes());
-        uart.write_chars(b"\nLINE: ");
-        let mut line = info.location().unwrap().line();
-        while line != 0 {
-            uart.put_char((line % 10) as u8 + 48);
-            line /= 10;
-        }
-        uart.put_char(b'\n');
-    };
+    //     uart.write_chars(b"\nPANIC: ");
+    //     if let Some(msg) = info.message().as_str() {
+    //         uart.write_chars(msg.as_bytes());
+    //     } else {
+    //         uart.write_chars(b"X");
+    //     }
+    //     uart.write_chars(b"\nFILE: ");
+    //     uart.write_chars(info.location().unwrap().file().as_bytes());
+    //     uart.write_chars(b"\nLINE: ");
+    //     let mut line = info.location().unwrap().line();
+    //     while line != 0 {
+    //         uart.put_char((line % 10) as u8 + 48);
+    //         line /= 10;
+    //     }
+    //     uart.put_char(b'\n');
+    // };
+
     cprintln!(
         "Encountered Panic (tp={}): {:#}",
         unsafe { Tp.read() },
@@ -63,6 +64,7 @@ pub mod mem;
 pub mod param;
 pub mod plic;
 pub mod proc;
+pub mod spinlock;
 pub mod start;
 pub mod trampoline;
 pub mod trap;

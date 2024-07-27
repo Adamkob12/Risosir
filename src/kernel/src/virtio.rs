@@ -11,7 +11,7 @@ use spin::Mutex;
 //
 
 /// The capacity (refered to as `QueueNum` in the spec) of the virtqueue.
-pub const VIRTQ_CAP: usize = 32;
+pub const VIRTQ_CAP: usize = 60;
 
 pub const SECTOR_SIZE: usize = 512;
 
@@ -290,7 +290,7 @@ impl VirtioDisk {
     }
 }
 
-pub fn try_read_from_disk(sector: u64, data: &mut [u8; 1024]) -> Result<(), ()> {
+pub fn read_from_disk(sector: u64, data: &mut [u8; 1024]) -> Result<(), ()> {
     let mut disk = DISK.get().unwrap().lock();
     let desc_id1 = disk.alloc_desc().ok_or(())?;
     let desc_id2 = disk.alloc_desc().ok_or(())?;
@@ -346,7 +346,7 @@ pub fn virtio_intr() {
     w_virtio_register::<VIRTIO_MMIO_INTERRUPT_ACK>(
         r_virtio_register::<VIRTIO_MMIO_INTERRUPT_STATUS>(),
     );
-
+    // cprintln!("virtio intr");
     let mut current_idx = disk.used_idxs;
     while current_idx < disk.used_ring.idx {
         let head_desc_id = disk.used_ring.ring[current_idx as usize % VIRTQ_CAP].desc_id as u16;

@@ -24,7 +24,7 @@ pub unsafe fn init_console() {
 impl Console {
     const fn new() -> Self {
         Console {
-            buf: [ascii::Char::QuestionMark; CONSOLE_BUFF_LEN],
+            buf: [ascii::Char::CapitalM; CONSOLE_BUFF_LEN],
             r_pointer: 0,
             w_pointer: 0,
         }
@@ -39,7 +39,7 @@ impl Console {
         })
     }
 
-    fn write_char(&mut self, c: ascii::Char) -> Result<(), ()> {
+    pub fn write_char(&mut self, c: ascii::Char) -> Result<(), ()> {
         if self.w_pointer.wrapping_add(1) == self.r_pointer {
             // Buffer full
             Err(())
@@ -55,7 +55,7 @@ impl Console {
         let mut chars_written: usize = 0;
         for c in s.chars() {
             let _ = self
-                .write_char(c.as_ascii().unwrap_or(ascii::Char::QuestionMark))
+                .write_char(c.as_ascii().unwrap_or(ascii::Char::SmallM))
                 .map_err(|_| return chars_written);
             chars_written += 1;
         }

@@ -10,6 +10,7 @@
 
 use core::ascii;
 
+pub const SECTOR_SIZE: usize = 512;
 pub const NODE_MAGIC_NUMBER: u32 = 102030069;
 pub const FILE_MAGIC_NUMBER: u32 = 900000111;
 pub const MAX_FILES: usize = NODE_SIZE;
@@ -22,7 +23,7 @@ pub type NodeId = u32;
 pub type FileId = u16;
 // Must be 32 bytes
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct FileMeta {
     pub magic_number: u32,                  // 4 bytes, Always =FILE_MAGIC_NUMBER
     pub node_list_start: NodeId,            // 4 bytes, the index of the node
@@ -53,3 +54,7 @@ const _: () = {
         panic!()
     }
 };
+
+pub const fn node_address(node_id: NodeId) -> usize {
+    NODES_OFFSET + size_of::<Node>() * node_id as usize
+}

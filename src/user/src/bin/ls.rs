@@ -6,5 +6,5 @@ use kernel::*;
 
 #[no_mangle]
 fn maine() {
-    FILES.lock().ls();
+    cprintln!("{}", 1 + 1);
 }

@@ -43,8 +43,6 @@ pub fn init_plic_global() {
 /// Enables this core to recieve UART and VIRTIO
 pub fn init_plic_hart(hart_id: u64, privilage: PrivLevel) {
     let context_id = context_id(hart_id, privilage);
-    // plic_enable(UART_IRQ, context_id);
-    // plic_enable(VIRTIO0_IRQ, context_id);
 
     let p = (PLIC_ENABLE_BASE + context_id as usize * 0x80) as *mut u32;
     unsafe { p.write_volatile((1 << UART_IRQ) | (1 << VIRTIO0_IRQ)) };
