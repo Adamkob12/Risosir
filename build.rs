@@ -32,7 +32,7 @@ fn main() {
         .map(|e| e.path())
         .filter(|e| e.is_file())
     {
-        let mut file_data_buff: FileData = [0; 1024 - 16];
+        let mut file_data_buff: FileDataSeg = [0; 1024 - 16];
         let mut shared_file = File::open(&entry).unwrap();
         let file_name = String::from(entry.file_name().unwrap().to_str().unwrap());
 

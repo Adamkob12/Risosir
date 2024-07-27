@@ -6,5 +6,5 @@ use kernel::*;
 
 #[no_mangle]
 fn maine() {
-    cprintln!("{}", 1 + 1);
+    cprintln!("Hi");
 }

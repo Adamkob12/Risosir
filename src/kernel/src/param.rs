@@ -25,8 +25,10 @@ pub const PAGE_SIZE: usize = 4096;
 pub const PAGES_PER_STACK: usize = 40;
 pub const STACK_SIZE: usize = PAGE_SIZE * PAGES_PER_STACK;
 
-pub const PAGES_PER_HEAP: usize = 1000;
-pub const HEAP_SIZE: usize = PAGES_PER_HEAP * PAGE_SIZE;
+pub const PAGES_PER_HEAP: u64 = 1000;
+pub const HEAP_SIZE: u64 = PAGES_PER_HEAP * PAGE_SIZE as u64;
+/// The start of the heap for a process
+pub const HEAP_START: u64 = 0x2200_0000;
 
 /// The maximum amount of active processes at a time
 pub const NPROC: usize = ProcId::max_value() as usize;

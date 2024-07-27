@@ -8,10 +8,16 @@
 #![feature(ascii_char)]
 #![feature(panic_info_message)]
 
+extern crate alloc;
+
 use crate::fs::FILES;
+use alloc::boxed::Box;
+use arch::registers::csr::{Satp, Sepc, Sstatus};
+use core::arch::asm;
 use core::hint;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::{fence, Ordering};
+use elf_parse::parse_executable_file;
 use kernel::arch::common::privilage::PrivLevel;
 use kernel::arch::registers::csr::{Sie, Stvec};
 use kernel::arch::registers::WriteInto;
@@ -21,6 +27,8 @@ use kernel::trampoline::trampoline;
 use kernel::trap::SupervisorInterrupt;
 use kernel::*;
 use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
+use param::ProcId;
+use proc::PROCS;
 use trap::enable_interrupts;
 
 static STARTED: AtomicBool = AtomicBool::new(false);
@@ -81,6 +89,26 @@ unsafe fn init_kernel(hart_id: u64) {
     enable_interrupts();
     fence(Ordering::SeqCst);
 
-    // FILES.lock().debug_file("ls");
-    FILES.lock().cat("console.txt");
+    let ls = Box::leak(FILES.lock().copy_to_ram("ls").unwrap());
+    let ls_exe = parse_executable_file(ls).unwrap();
+    let procs = PROCS.get().unwrap();
+    let ls_proc_id = procs.alloc_proc().unwrap();
+    {
+        let mut ls_proc = procs[ls_proc_id].lock();
+        ls_proc.activate(ls_exe);
+    }
+    // run_proc(ls_proc_id);
 }
+
+// unsafe fn run_proc(pid: ProcId) {
+//     if let Some(proc_context) = &(PROCS.get().unwrap().get(pid as usize).unwrap())
+//         .lock()
+//         .context
+//     {
+//         Sstatus.write(Sstatus.read() & !(PrivLevel::U as u64));
+//         Sepc.write(proc_context.program_counter);
+//         mem::paging::set_current_page_table(proc_context.page_table);
+
+//         asm!("sret");
+//     }
+// }

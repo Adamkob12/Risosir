@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// The kernel L3 page table
-pub static mut KERNEL_PAGE_TABLE: PageTable = PageTable::empty();
+pub static mut KERNEL_PAGE_TABLE: PageTable = PageTable::zeroed();
 
 #[derive(Clone, Copy)]
 #[repr(C, align(4096))]
@@ -186,7 +186,7 @@ impl PageTableLevel {
 }
 
 impl PageTable {
-    pub const fn empty() -> Self {
+    pub const fn zeroed() -> Self {
         PageTable([PageTableEntry::new_invalid(); PAGE_TABLE_ENTRIES])
     }
 

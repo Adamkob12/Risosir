@@ -3,7 +3,7 @@ use core::{
     mem::{transmute, MaybeUninit},
 };
 
-use alloc::boxed::Box;
+use alloc::{boxed::Box, vec::Vec};
 pub use fs::*;
 use spin::Mutex;
 
@@ -55,13 +55,15 @@ impl FileTable {
 
     /// Copy the entire file data to ram, returning a slice of contigous Physical
     /// Frames that contain the file data.
-    pub fn copy_to_ram(&self, file_name: &str) -> Option<Box<[FileData]>> {
+    pub fn copy_to_ram(&self, file_name: &str) -> Option<Box<[u8]>> {
         let file_meta = self.get_file_meta(file_name)?;
-        let mut file_data_heap =
-            Box::<[FileData]>::new_zeroed_slice(file_meta.size as usize / FILE_DATA_SIZE + 1);
+        let data_segs = file_meta.size as usize / FILE_DATA_SIZE + 1;
+        // let mut file_data_heap =
+        //     Box::<[FileDataSeg]>::new_zeroed_slice(file_meta.size as usize / FILE_DATA_SIZE + 1);
+        let mut file_data_segs: Vec<FileDataSeg> = Vec::with_capacity(data_segs);
         let head_node_id = file_meta.node_list_start;
         let mut current_node_id = head_node_id;
-        for data_seg in &mut file_data_heap {
+        for _ in 0..data_segs {
             let mut node: Node = unsafe { core::mem::transmute([0u8; 1024]) };
             read_node(&mut node, current_node_id);
             #[cfg(debug_assertions)]
@@ -70,12 +72,14 @@ impl FileTable {
                 current_node_id,
                 node.next_node
             );
-            data_seg.write(node.data);
+            file_data_segs.push(node.data);
             current_node_id = node.next_node;
         }
+        let mut file_data = file_data_segs.into_flattened();
+        file_data.truncate(file_meta.size as usize);
         #[cfg(debug_assertions)]
         cprintln!("Done copying file {} to ram", file_name);
-        Some(unsafe { transmute(file_data_heap) })
+        Some(file_data.into_boxed_slice())
     }
 
     pub fn debug_file(&self, file_name: &str) {
@@ -84,13 +88,11 @@ impl FileTable {
 
     pub fn cat(&self, file_name: &str) {
         let file_data = self.copy_to_ram(file_name).unwrap();
-        for data_seg in &file_data {
-            for chr in data_seg {
-                cprint!(
-                    "{}",
-                    ascii::Char::from_u8(*chr).unwrap_or(ascii::Char::QuestionMark)
-                );
-            }
+        for chr in &file_data {
+            cprint!(
+                "{}",
+                ascii::Char::from_u8(*chr).unwrap_or(ascii::Char::QuestionMark)
+            );
         }
     }
 }

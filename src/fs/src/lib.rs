@@ -32,7 +32,7 @@ pub struct FileMeta {
     pub size: u32,                          // 4 bytes, size in bytes
 }
 
-pub type FileData = [u8; FILE_DATA_SIZE];
+pub type FileDataSeg = [u8; FILE_DATA_SIZE];
 
 // Must be 1 KB exactly
 #[repr(C)]
@@ -43,7 +43,7 @@ pub struct Node {
     pub next_node: NodeId, // 4 bytes
     pub prev_node: NodeId, // 4 bytes
     // metadata = 16 bytes
-    pub data: FileData,
+    pub data: FileDataSeg,
 }
 
 const _: () = {
