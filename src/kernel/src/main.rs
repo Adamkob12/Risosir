@@ -87,6 +87,6 @@ unsafe fn init_kernel(hart_id: u64) {
     enable_interrupts();
     fence(Ordering::SeqCst);
 
-    // FILES.lock().debug_file("ls");
-    // FILES.lock().cat("ls");
+    FILES.lock().debug_file("ls");
+    FILES.lock().cat("ls");
 }

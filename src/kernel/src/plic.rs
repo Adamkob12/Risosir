@@ -34,7 +34,7 @@ fn context_id(hart_id: u64, privilage: PrivLevel) -> u64 {
 pub fn init_plic_global() {
     // Set the priority of the UART and VIRTIO to 1
     unsafe {
-        plic_priority(UART_IRQ).write_volatile(1);
+        // plic_priority(UART_IRQ).write_volatile(1);
         plic_priority(VIRTIO0_IRQ).write_volatile(1);
     };
 }
