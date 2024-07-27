@@ -1,8 +1,4 @@
-use crate::{
-    cprintln,
-    uart::{init_uart, UART},
-};
-use core::ascii;
+use crate::cprintln;
 use spin::Mutex;
 
 type KeyBoardPtr = u16;

@@ -1,13 +1,10 @@
-use crate::{
-    arch::{
+use crate::arch::{
         common::privilage::PrivLevel,
         memlayout::{
             PLIC_CLAIM_BASE, PLIC_CLAIM_THRESHOLD, PLIC_ENABLE_BASE, PLIC_PRIORITY_BASE, UART_IRQ,
             VIRTIO0_IRQ,
         },
-    },
-    cprintln,
-};
+    };
 
 const fn plic_priority(source_id: usize) -> *mut u32 {
     (PLIC_PRIORITY_BASE + source_id * 4) as *mut u32

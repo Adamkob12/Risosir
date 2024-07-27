@@ -4,15 +4,11 @@ pub mod interrupt;
 use crate::{
     arch::{
         common::privilage::PrivLevel,
-        memlayout::{UART_IRQ, VIRTIO0_IRQ},
+        memlayout::VIRTIO0_IRQ,
         registers::{gpr::Tp, WriteInto},
-    },
-    cprint, cprintln,
-    keyboard::{self, KEYBOARD},
+    }, cprintln,
     plic::{plic_claim, plic_complete},
-    uart::{self, uart_interrupt, UART},
     virtio::virtio_intr,
-    CONSOLE,
 };
 use core::arch::asm;
 pub use exception::*;

@@ -1,6 +1,5 @@
 use core::arch::asm;
 
-use crate::cprint;
 
 #[repr(align(16))]
 #[allow(unsafe_op_in_unsafe_fn)]

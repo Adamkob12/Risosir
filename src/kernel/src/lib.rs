@@ -83,7 +83,6 @@ use mem::{
     paging::{init_kernel_page_table, set_current_page_table, KERNEL_PAGE_TABLE},
 };
 use proc::init_procs;
-use uart::UART;
 
 extern "C" {
     fn end();

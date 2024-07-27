@@ -1,9 +1,9 @@
 use crate::{
-    trap::{disable_interrupts, enable_interrupts, without_interrupts},
-    uart::{init_uart, Uart, UART},
+    trap::without_interrupts,
+    uart::{init_uart, UART},
 };
 use core::ascii;
-use spin::{Mutex, MutexGuard};
+use spin::Mutex;
 
 pub const CONSOLE_DEV_ID: usize = 1;
 type ConsolePtr = u16;

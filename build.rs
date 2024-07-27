@@ -6,7 +6,6 @@ use std::{
     ascii,
     fs::{read_dir, File, OpenOptions},
     io::{ErrorKind, Read, Seek, SeekFrom, Write},
-    mem,
     path::Path,
     slice,
 };

@@ -7,7 +7,7 @@ use alloc::boxed::Box;
 pub use fs::*;
 use spin::Mutex;
 
-use crate::{cprint, cprintln, mem::paging::Frame, param::PAGE_SIZE, virtio::read_from_disk};
+use crate::{cprint, cprintln, virtio::read_from_disk};
 
 #[repr(transparent)]
 pub struct FileTable([FileMeta; MAX_FILES]);

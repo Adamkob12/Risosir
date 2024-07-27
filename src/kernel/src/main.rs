@@ -9,9 +9,8 @@
 #![feature(panic_info_message)]
 
 use crate::fs::FILES;
-use core::arch::asm;
+use core::hint;
 use core::sync::atomic::{fence, Ordering};
-use core::{ascii, hint};
 use core::{panic::PanicInfo, sync::atomic::AtomicBool};
 use kernel::arch::common::privilage::PrivLevel;
 use kernel::arch::registers::csr::{Sie, Sstatus, Stvec};
@@ -25,9 +24,7 @@ use kernel::trap::SupervisorInterrupt;
 use kernel::uart::UART;
 use kernel::*;
 use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
-use keyboard::read_recent_input;
 use trap::enable_interrupts;
-use virtio::read_from_disk;
 
 static STARTED: AtomicBool = AtomicBool::new(false);
 

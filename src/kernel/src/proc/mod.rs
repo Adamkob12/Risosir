@@ -1,9 +1,8 @@
 use crate::{
     arch::memlayout::{TRAMPOLINE_VADDR, TRAPFRAME_VADDR},
-    cprint, cprintln,
     mem::{
         alloc_frame,
-        paging::{Frame, Page, PageTable, PageTableLevel},
+        paging::{Frame, PageTable, PageTableLevel},
         virtual_mem::{PTEFlags, PhysAddr, VirtAddr},
     },
     param::{ProcId, HEAP_SIZE, NPROC, PAGES_PER_HEAP, PAGES_PER_STACK, PAGE_SIZE},
@@ -11,10 +10,7 @@ use crate::{
 };
 use alloc::boxed::Box;
 use conquer_once::spin::OnceCell;
-use core::{
-    mem::transmute,
-    sync::atomic::{AtomicUsize, Ordering},
-};
+use core::sync::atomic::{AtomicUsize, Ordering};
 use spin::RwLock;
 
 #[derive(Clone, Copy)]

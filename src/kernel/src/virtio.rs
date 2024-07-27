@@ -1,4 +1,4 @@
-use core::{fmt::Pointer, mem::MaybeUninit, sync::atomic::fence};
+use core::{mem::MaybeUninit, sync::atomic::fence};
 
 use crate::{arch::memlayout::VIRTIO0, cprintln};
 use alloc::boxed::Box;
@@ -257,15 +257,6 @@ pub fn init_virtio() {
     w_virtio_register::<VIRTIO_MMIO_DEV_STATUS>(status);
 
     // The device is live!
-}
-
-impl VirtqDesc {
-    fn setup_default(&mut self, req: &VirtioBlkReq) {
-        self.addr = req as *const _ as u64;
-        self.len = size_of::<VirtioBlkReq>() as u32;
-        self.flags = 0;
-        self.next = 0;
-    }
 }
 
 impl VirtioDisk {

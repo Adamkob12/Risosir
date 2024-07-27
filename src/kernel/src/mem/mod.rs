@@ -4,7 +4,7 @@ pub mod virtual_mem;
 use crate::{end_of_kernel_data_section, param::RAM_SIZE};
 use core::{alloc::Layout, ptr::NonNull};
 use linked_list_allocator::LockedHeap;
-use paging::{garbage_frame, garbage_frames, Frame};
+use paging::{garbage_frame, Frame};
 
 #[cfg(not(feature = "debug-allocations"))]
 #[global_allocator]

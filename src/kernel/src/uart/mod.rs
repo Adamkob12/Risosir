@@ -3,14 +3,11 @@ use core::{ascii, fmt::Write};
 use crate::{
     arch::{
         memlayout::UART_BASE_ADDR,
-        registers::{csr::Sstatus, ReadFrom, WriteInto},
+        registers::{ReadFrom, WriteInto},
     },
-    cprint, cprintln,
-    keyboard::{Keyboard, KEYBOARD},
     Console, CONSOLE,
 };
-use alloc::format;
-use spin::{Mutex, MutexGuard};
+use spin::Mutex;
 
 /// Uart 16550
 /// Implementation based off [`this spec`](https://www.lammertbies.nl/comm/info/serial-uart#DLX)
@@ -122,7 +119,7 @@ pub fn uart_interrupt() {
     let mut console = CONSOLE.lock();
     let mut uart = UART.lock();
     // let mut kb = KEYBOARD.lock();
-    let isr = unsafe { uart.read_register::<ISR>() };
+    let _isr = unsafe { uart.read_register::<ISR>() };
     {
         while let Some(key) = unsafe { uart.get_next() } {
             console

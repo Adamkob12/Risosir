@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-use fs::FILES;
+// use fs::FILES;
 use kernel::*;
 
 #[no_mangle]

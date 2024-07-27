@@ -1,4 +1,4 @@
-use super::{alloc_frame, alloc_frame_unwrap, virtual_mem::*};
+use super::{alloc_frame_unwrap, virtual_mem::*};
 use crate::{
     arch::{
         common::sfence_vma,
