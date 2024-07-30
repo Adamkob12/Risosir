@@ -22,13 +22,8 @@ struct GlobalStack([u8; STACK_SIZE * NCPU]);
 static mut GLOBAL_STACK: GlobalStack = GlobalStack([0; STACK_SIZE * NCPU]);
 
 #[allow(unsafe_op_in_unsafe_fn)]
+#[no_mangle]
 pub unsafe fn start() -> ! {
-    // The function `main` is defined in main.rs, but we don't have access to it so we can't reference it directly.
-    // Fortunately, it must be #[no_mangle], so we can act as though it's defined here.
-    extern "C" {
-        fn main() -> !;
-    }
-
     // Set Mstatus.MPP to Supervisor, so after calling `mret` we'll end up in Supervisor
     mstatus::set_mpp(mstatus::MPP::Supervisor);
     // Set the Mepc to point to the main function, after calling `mret`, it will start executing.
@@ -62,7 +57,13 @@ pub unsafe fn start() -> ! {
     let cpuid = mhartid::read();
     tp::write(cpuid);
 
-    setup_timer_interrupts(cpuid);
+    // The function `main` is defined in main.rs, but we don't have access to it so we can't reference it directly.
+    // Fortunately, it must be #[no_mangle], so we can act as though it's defined here.
+    extern "C" {
+        fn main() -> !;
+    }
+
+    // setup_timer_interrupts(cpuid);
 
     asm!("mret");
 
@@ -81,7 +82,6 @@ static mut TIMER_INTERRUPT_DATA: [DataToHandleTimerInt; NCPU] = [[0; 5]; NCPU];
 /// Set up timer interrupts
 pub unsafe fn setup_timer_interrupts(cpuid: usize) {
     // Schedule the next timer interrupt to happen in `TIMER_INTERRUPT_INTERVAL` cycles.
-    // Mtimecmp { hart_id }.write(Mtime.read() + TIMER_INTERRUPT_INTERVAL);
     mtimecmp::write(cpuid, mtime::read() + TIMER_INTERRUPT_INTERVAL);
     // Set the correct data for the timer interrupt handler
     TIMER_INTERRUPT_DATA[cpuid][3] = MTIMECMP_ADDR + 8 * cpuid;

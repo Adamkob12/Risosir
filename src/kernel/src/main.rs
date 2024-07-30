@@ -24,10 +24,10 @@ static STARTED: AtomicBool = AtomicBool::new(false);
 
 #[export_name = "main"]
 extern "C" fn main() -> ! {
-    let hart_id = unsafe { tp::read() };
+    let cpuid = unsafe { tp::read() };
 
-    if hart_id == 0 {
-        unsafe { init_kernel(hart_id) };
+    if cpuid == 0 {
+        unsafe { init_kernel(cpuid) };
         // The kernel has officially booted
         STARTED.store(true, Ordering::SeqCst);
     } else {
@@ -37,8 +37,7 @@ extern "C" fn main() -> ! {
         }
     }
     if STARTED.load(Ordering::SeqCst) {
-        cprintln!("Hello from CPU #{}", hart_id);
-
+        cprintln!("Hello from CPU #{}", cpuid);
         loop {
             hint::spin_loop();
         }
