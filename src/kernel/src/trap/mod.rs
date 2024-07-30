@@ -3,7 +3,6 @@ pub mod interrupt;
 
 use crate::{
     arch::gpr::tp,
-    cprintln,
     memlayout::{UART_IRQ, VIRTIO0_IRQ},
     plic::{plic_claim, plic_complete},
     uart::uart_interrupt,

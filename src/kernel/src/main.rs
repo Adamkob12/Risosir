@@ -18,7 +18,6 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::{fence, Ordering};
 use kernel::mem::paging::KERNEL_PAGE_TABLE;
 use kernel::trampoline::trampoline;
-use kernel::trap::SupervisorInterrupt;
 use kernel::*;
 use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
 static STARTED: AtomicBool = AtomicBool::new(false);

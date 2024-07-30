@@ -1,4 +1,4 @@
-use core::{ascii, fmt::Write};
+use core::ascii;
 
 use crate::{memlayout::UART_BASE_ADDR, Console, CONSOLE};
 use spin::Mutex;

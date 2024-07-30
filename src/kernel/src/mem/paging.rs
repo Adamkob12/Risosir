@@ -20,14 +20,11 @@ pub struct Frame([u8; PAGE_SIZE]);
 
 #[derive(Clone, Copy)]
 #[repr(C, align(4096))]
+#[allow(dead_code)]
 pub struct Page([u8; PAGE_SIZE]);
 
 pub(super) const fn garbage_frame() -> Frame {
     Frame([0; PAGE_SIZE])
-}
-
-pub(super) const fn garbage_frames<const N: usize>() -> [Frame; N] {
-    [garbage_frame(); N]
 }
 
 #[repr(C, align(4096))]

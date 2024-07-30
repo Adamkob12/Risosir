@@ -14,7 +14,7 @@ pub const NCPU: usize = 8;
 // Interrupts
 
 /// Default interval (in cycles) between incoming timer interrupts.
-pub const TIMER_INTERRUPT_INTERVAL: u64 = 1_000_000 * 10;
+pub const TIMER_INTERRUPT_INTERVAL: usize = 1_000_000 * 10;
 
 // Processes
 

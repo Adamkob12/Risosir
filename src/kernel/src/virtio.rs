@@ -1,7 +1,7 @@
 use crate::{cprintln, memlayout::VIRTIO0};
 use alloc::boxed::Box;
 use conquer_once::spin::OnceCell;
-use core::{arch::riscv64::wfi, mem::MaybeUninit, sync::atomic::fence};
+use core::{mem::MaybeUninit, sync::atomic::fence};
 use spin::Mutex;
 
 //

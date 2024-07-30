@@ -23,4 +23,21 @@ pub mod _arch {
     pub mod gpr {
         impl_gpr_rw!(tp, "tp");
     }
+    pub mod clint {
+        pub mod mtime {
+            use crate::memlayout::MTIME_ADDR;
+
+            pub fn read() -> usize {
+                unsafe { (MTIME_ADDR as *const usize).read_volatile() }
+            }
+        }
+
+        pub mod mtimecmp {
+            use crate::memlayout::MTIMECMP_ADDR;
+
+            pub fn write(cpuid: usize, val: usize) {
+                unsafe { ((MTIMECMP_ADDR + 8 * cpuid) as *mut usize).write_volatile(val) };
+            }
+        }
+    }
 }

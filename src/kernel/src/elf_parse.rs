@@ -1,6 +1,5 @@
 use crate::cprintln;
 use elf::{endian::AnyEndian, ElfBytes, ParseError};
-use fs::FILE_DATA_SIZE;
 
 const RISCV_E_MACHINE: u16 = 0xf3;
 

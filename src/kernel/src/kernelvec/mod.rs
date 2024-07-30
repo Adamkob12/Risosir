@@ -18,6 +18,7 @@ pub unsafe fn timervec() {
     asm!("add a3, a3, a2"); // Increment mtimecmp by the desired interval
     asm!("sd a3, 0(a1)"); // Store the value back in the mtimecmp register
 
+    // Trigger an s-mode software interrupt
     asm! {
         "li a1, 2",
         "csrw sip, a1"

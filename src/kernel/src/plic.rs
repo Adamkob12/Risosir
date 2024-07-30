@@ -1,7 +1,7 @@
-use riscv_peripheral::plic::{claim::CLAIM, Plic};
+use riscv_peripheral::plic::claim::CLAIM;
 
 use crate::memlayout::{
-    PLIC, PLIC_CLAIM_BASE, PLIC_CLAIM_THRESHOLD, PLIC_ENABLE_BASE, PLIC_PRIORITY_BASE, UART_IRQ,
+    PLIC_CLAIM_BASE, PLIC_CLAIM_THRESHOLD, PLIC_ENABLE_BASE, PLIC_PRIORITY_BASE, UART_IRQ,
     VIRTIO0_IRQ,
 };
 
@@ -9,14 +9,6 @@ pub const PLIC_CLAIM: CLAIM = unsafe { CLAIM::new(PLIC_CLAIM_BASE) };
 
 const fn plic_priority(source_id: usize) -> *mut u32 {
     (PLIC_PRIORITY_BASE + source_id * 4) as *mut u32
-}
-
-fn plic_enable(source_id: usize, context_id: usize) {
-    if source_id > 31 {
-        panic!("Only 31 devices allowed")
-    }
-    let p = (PLIC_ENABLE_BASE + context_id as usize * 0x80) as *mut u32;
-    unsafe { p.write_volatile(p.read_volatile() | (1 << source_id)) };
 }
 
 /// Basic inititializatin of the PLIC for all the cores

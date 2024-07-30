@@ -2,14 +2,11 @@ use crate::{
     elf_parse::ParsedExecutable,
     mem::{
         alloc_frame,
-        paging::{Frame, PageTable, PageTableLevel},
+        paging::{PageTable, PageTableLevel},
         virtual_mem::{PTEFlags, PhysAddr, VirtAddr},
     },
     memlayout::{TRAMPOLINE_VADDR, TRAPFRAME_VADDR},
-    param::{
-        ProcId, HEAP_SIZE, HEAP_START, NPROC, PAGES_PER_HEAP, PAGES_PER_STACK, PAGE_SIZE,
-        STACK_SIZE,
-    },
+    param::{ProcId, HEAP_SIZE, HEAP_START, NPROC, PAGE_SIZE, STACK_SIZE},
     trampoline::trampoline,
 };
 use alloc::boxed::Box;
@@ -18,7 +15,7 @@ use core::{
     ops::Deref,
     sync::atomic::{AtomicUsize, Ordering},
 };
-use spin::{Mutex, RwLock};
+use spin::Mutex;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(usize)]
