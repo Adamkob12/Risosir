@@ -1,6 +1,5 @@
 use core::arch::asm;
 
-
 #[repr(align(16))]
 #[allow(unsafe_op_in_unsafe_fn)]
 #[no_mangle]

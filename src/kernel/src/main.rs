@@ -13,6 +13,7 @@ extern crate alloc;
 use crate::fs::FILES;
 use alloc::boxed::Box;
 use arch::registers::csr::{Satp, Sepc, Sstatus};
+use arch::registers::gpr::{Sp, T2};
 use core::arch::asm;
 use core::hint;
 use core::sync::atomic::AtomicBool;
@@ -28,7 +29,7 @@ use kernel::trap::SupervisorInterrupt;
 use kernel::*;
 use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
 use param::ProcId;
-use proc::PROCS;
+use proc::{ProcContext, Process, PROCS};
 use trap::enable_interrupts;
 
 static STARTED: AtomicBool = AtomicBool::new(false);
@@ -89,12 +90,14 @@ unsafe fn init_kernel(hart_id: u64) {
     enable_interrupts();
     fence(Ordering::SeqCst);
 
-    let ls = Box::leak(FILES.lock().copy_to_ram("ls").unwrap());
-    let ls_exe = parse_executable_file(ls).unwrap();
+    let test = Box::leak(FILES.lock().copy_to_ram("test").unwrap());
+    let test_exe = parse_executable_file(test).unwrap();
     let procs = PROCS.get().unwrap();
-    let ls_proc_id = procs.alloc_proc().unwrap();
-    {
-        let mut ls_proc = procs[ls_proc_id].lock();
-        ls_proc.activate(ls_exe);
-    }
+    let test_proc_id = procs.alloc_proc("test").unwrap();
+    procs[test_proc_id].lock().activate(test_exe);
+}
+
+unsafe fn exec_proc(proc_cx: &ProcContext<'static>) {
+    mem::paging::set_current_page_table(proc_cx.page_table);
+    Sp.write(proc_cx.stack_pointer);
 }

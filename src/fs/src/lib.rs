@@ -1,8 +1,3 @@
-#![feature(asm_const)]
-#![allow(static_mut_refs)]
-#![feature(naked_functions)]
-#![feature(fn_align)]
-#![feature(panic_info_message)]
 #![feature(ascii_char)]
 #![feature(ascii_char_variants)]
 #![no_std]
@@ -42,7 +37,6 @@ pub struct Node {
     pub flags: u16,        // 2 byte
     pub next_node: NodeId, // 4 bytes
     pub prev_node: NodeId, // 4 bytes
-    // metadata = 16 bytes
     pub data: FileDataSeg,
 }
 

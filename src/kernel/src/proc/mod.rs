@@ -183,11 +183,12 @@ impl ProcTable {
         }))
     }
 
-    pub fn alloc_proc(&self) -> Option<ProcId> {
+    pub fn alloc_proc(&self, name: &'static str) -> Option<ProcId> {
         for proc in &self.0 {
-            if let Some(proc) = proc.try_lock() {
+            if let Some(mut proc) = proc.try_lock() {
                 if proc.status.load(Ordering::SeqCst) == ProcStatus::Unused {
                     proc.status.store(ProcStatus::Inactive, Ordering::SeqCst);
+                    proc.name = name;
                     return Some(proc.id);
                 }
             }

@@ -24,3 +24,12 @@ macro_rules! impl_gpt_reg_rw {
 /// General Purpose Register - Thread Pointer (x4)
 pub struct Tp;
 impl_gpt_reg_rw!(Tp, u64, "tp");
+
+pub struct T2;
+impl_gpt_reg_rw!(T2, u64, "t2");
+
+pub struct Sp;
+impl_gpt_reg_rw!(Sp, u64, "sp");
+
+pub struct Ra;
+impl_gpt_reg_rw!(Ra, u64, "ra");

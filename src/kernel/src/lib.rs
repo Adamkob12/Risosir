@@ -66,6 +66,7 @@ pub mod mem;
 pub mod param;
 pub mod plic;
 pub mod proc;
+pub mod scheduler;
 pub mod spinlock;
 pub mod start;
 pub mod trampoline;

@@ -1,13 +1,11 @@
+use crate::{cprint, cprintln, virtio::read_from_disk};
+use alloc::{boxed::Box, vec::Vec};
 use core::{
     ascii,
     mem::{transmute, MaybeUninit},
 };
-
-use alloc::{boxed::Box, vec::Vec};
 pub use fs::*;
 use spin::Mutex;
-
-use crate::{cprint, cprintln, virtio::read_from_disk};
 
 #[repr(transparent)]
 pub struct FileTable([FileMeta; MAX_FILES]);
@@ -58,8 +56,6 @@ impl FileTable {
     pub fn copy_to_ram(&self, file_name: &str) -> Option<Box<[u8]>> {
         let file_meta = self.get_file_meta(file_name)?;
         let data_segs = file_meta.size as usize / FILE_DATA_SIZE + 1;
-        // let mut file_data_heap =
-        //     Box::<[FileDataSeg]>::new_zeroed_slice(file_meta.size as usize / FILE_DATA_SIZE + 1);
         let mut file_data_segs: Vec<FileDataSeg> = Vec::with_capacity(data_segs);
         let head_node_id = file_meta.node_list_start;
         let mut current_node_id = head_node_id;
@@ -100,17 +96,14 @@ impl FileTable {
 fn read_node(buf: &mut Node, node_id: u32) {
     let node_addr = node_address(node_id);
     let node_sector = node_addr / SECTOR_SIZE;
-    // while read_from_disk(node_sector as u64, unsafe { transmute(&mut *buf) }).is_err() {
-    //     for _ in 0..100_000 {}
-    // }
-    // while buf.magic_number != NODE_MAGIC_NUMBER {
-    //     for _ in 0..100_000 {}
-    // }
     read_from_disk(node_sector as u64, unsafe { transmute(&mut *buf) }).unwrap();
     assert_eq!(buf.magic_number, NODE_MAGIC_NUMBER);
 }
 
 fn strcmp_ascii<const N: usize>(s: &[ascii::Char], ass: [ascii::Char; N]) -> bool {
+    if N < s.len() {
+        return false;
+    }
     for i in 0..N {
         if *s.get(i).unwrap_or(&ascii::Char::from_u8(0).unwrap()) != ass[i] {
             return false;
