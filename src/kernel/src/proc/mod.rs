@@ -38,16 +38,8 @@ pub struct Process<'p> {
     id: ProcId,
     /// The status of the process
     status: AtomicProcStatus,
-    pub context: Option<ProcContext<'p>>,
-}
-
-// All of the values here are *Virtual* addresses with respect to this processes page table.
-pub struct ProcContext<'p> {
-    pub stack_pointer: u64,
-    pub program_counter: u64,
-    pub heap_start: u64,
-    pub heap_size: u64,
-    pub page_table: &'p PageTable,
+    pub page_table: &'p mut PageTable,
+    pub trapframe: &'p mut Trapframe,
 }
 
 const INACTIVE_PROC_NAME: &str = "X";
@@ -62,16 +54,18 @@ pub unsafe fn init_procs() {
 
 impl<'a> Process<'a> {
     pub fn new_inactive(id: ProcId) -> Self {
+        let pt: &mut PageTable = Box::leak(unsafe { Box::new_zeroed().assume_init() });
+        let tf: &mut Trapframe = Box::leak(unsafe { Box::new_zeroed().assume_init() });
         Process {
             name: INACTIVE_PROC_NAME,
             id,
             status: AtomicProcStatus::new(ProcStatus::Unused),
-            context: None,
+            page_table: pt,
+            trapframe: tf,
         }
     }
 
     pub fn activate(&mut self, exe: ParsedExecutable<'a>) {
-        let pt = Box::leak(Box::new(PageTable::zeroed()));
         // The program counter needs to start at the start of the code section
         let program_counter = exe.entry_point as u64;
         // Map the text section (code of the process), it needs to be readable and executable
@@ -79,7 +73,7 @@ impl<'a> Process<'a> {
             let text_addr = exe.text.as_ptr() as u64;
             let text_size = exe.text.len() as u64;
             for offset in (0..text_size).into_iter().step_by(PAGE_SIZE) {
-                pt.strong_map(
+                self.page_table.strong_map(
                     VirtAddr::from_raw(exe.text_v as u64 + offset),
                     PhysAddr::from_raw(text_addr + offset),
                     PTEFlags::valid().readable().executable(),
@@ -92,7 +86,7 @@ impl<'a> Process<'a> {
             let rodata_addr = exe.rodata.as_ptr() as u64;
             let rodata_size = exe.rodata.len() as u64;
             for offset in (0..rodata_size).into_iter().step_by(PAGE_SIZE) {
-                pt.strong_map(
+                self.page_table.strong_map(
                     VirtAddr::from_raw(exe.text_v as u64 + offset),
                     PhysAddr::from_raw(rodata_addr + offset),
                     PTEFlags::valid().readable(),
@@ -105,7 +99,7 @@ impl<'a> Process<'a> {
             let data_addr = exe.data.as_ptr() as u64;
             let data_size = exe.data.len() as u64;
             for offset in (0..data_size).into_iter().step_by(PAGE_SIZE) {
-                pt.strong_map(
+                self.page_table.strong_map(
                     VirtAddr::from_raw(exe.data_v as u64 + offset),
                     PhysAddr::from_raw(data_addr + offset),
                     PTEFlags::valid().readable().writable(),
@@ -124,7 +118,7 @@ impl<'a> Process<'a> {
             let stack_size = STACK_SIZE as u64;
             for offset in (0..stack_size).into_iter().step_by(PAGE_SIZE) {
                 let frame_addr = unsafe { alloc_frame() }.unwrap().as_ptr() as u64;
-                pt.strong_map(
+                self.page_table.strong_map(
                     VirtAddr::from_raw(stack_addr as u64 + offset),
                     PhysAddr::from_raw(frame_addr),
                     PTEFlags::valid().readable().writable(),
@@ -138,7 +132,7 @@ impl<'a> Process<'a> {
         {
             for offset in (0..HEAP_SIZE).into_iter().step_by(PAGE_SIZE) {
                 let frame_addr = unsafe { alloc_frame() }.unwrap().as_ptr() as u64;
-                pt.strong_map(
+                self.page_table.strong_map(
                     VirtAddr::from_raw(HEAP_START + offset as u64),
                     PhysAddr::from_raw(frame_addr),
                     PTEFlags::valid().readable().writable(),
@@ -149,29 +143,23 @@ impl<'a> Process<'a> {
 
         // map the trapframe
         {
-            let frame = unsafe { alloc_frame() }.unwrap();
-            pt.strong_map(
+            self.page_table.strong_map(
                 VirtAddr::from_raw(TRAPFRAME_VADDR as u64),
-                PhysAddr::from_raw(frame.as_ptr() as u64),
+                PhysAddr::from_raw(self.trapframe as *mut _ as u64),
                 PTEFlags::valid().readable().writable(),
                 PageTableLevel::L2,
             );
         }
         // map the trampoline
-        pt.strong_map(
+        self.page_table.strong_map(
             VirtAddr::from_raw(TRAMPOLINE_VADDR as u64),
             PhysAddr::from_raw(trampoline as u64),
             PTEFlags::valid().readable().executable(),
             PageTableLevel::L2,
         );
 
-        self.context = Some(ProcContext {
-            stack_pointer,
-            heap_start: HEAP_START,
-            heap_size: HEAP_SIZE,
-            program_counter,
-            page_table: pt,
-        });
+        trapframe().sp = stack_pointer as usize;
+        trapframe().epc = program_counter as usize;
         self.status.store(ProcStatus::Runnable, Ordering::Relaxed);
     }
 }
@@ -203,6 +191,10 @@ impl core::ops::Index<ProcId> for ProcTable {
     fn index(&self, index: ProcId) -> &Self::Output {
         &self.0[index as usize]
     }
+}
+
+fn trapframe() -> &'static mut Trapframe {
+    unsafe { &mut *(TRAPFRAME_VADDR as *mut Trapframe) }
 }
 
 #[derive(Clone, Copy, Default, Debug)]

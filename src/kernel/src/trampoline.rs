@@ -85,12 +85,6 @@ pub unsafe extern "C" fn trampoline() -> ! {
     #[no_mangle]
     #[repr(align(16))]
     pub unsafe extern "C" fn userret(pagetable: usize) -> ! {
-        // userret(TRAPFLAME, pagetable)
-        // called by usertrap_ret() in trap.rs to
-        // switch from kernel to user.
-        // a0: TRAPFRAME, in user page table.
-        // a1: user page table, for satp.
-
         asm!(
             // switch to the user page table.
             "sfence.vma zero, zero",

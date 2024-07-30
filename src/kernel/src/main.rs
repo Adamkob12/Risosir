@@ -29,7 +29,7 @@ use kernel::trap::SupervisorInterrupt;
 use kernel::*;
 use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
 use param::ProcId;
-use proc::{ProcContext, Process, PROCS};
+use proc::{Process, PROCS};
 use trap::enable_interrupts;
 
 static STARTED: AtomicBool = AtomicBool::new(false);
@@ -97,7 +97,7 @@ unsafe fn init_kernel(hart_id: u64) {
     procs[test_proc_id].lock().activate(test_exe);
 }
 
-unsafe fn exec_proc(proc_cx: &ProcContext<'static>) {
-    mem::paging::set_current_page_table(proc_cx.page_table);
-    Sp.write(proc_cx.stack_pointer);
+unsafe fn exec_proc(proc: &Process<'static>) {
+    Sstatus.write(Sstatus.read() & !(PrivLevel::U as u64));
+    Sepc.write(proc.trapframe.epc as u64);
 }
