@@ -1,14 +1,12 @@
+use riscv::{asm::sfence_vma_all, register::satp};
+
 use super::{alloc_frame_unwrap, virtual_mem::*};
 use crate::{
-    arch::{
-        common::sfence_vma,
-        memlayout::{
-            CLINT_BASE_ADDR, KERNEL_BASE_ADDR, MTIMECMP_ADDR, MTIME_ADDR, PLIC, TRAMPOLINE_VADDR,
-            UART_BASE_ADDR, VIRTIO0,
-        },
-        registers::{csr::Satp, WriteInto},
-    },
     cprint, cprintln, end_of_kernel_code_section, end_of_kernel_data_section,
+    memlayout::{
+        CLINT_BASE_ADDR, KERNEL_BASE_ADDR, MTIMECMP_ADDR, MTIME_ADDR, PLIC, TRAMPOLINE_VADDR,
+        UART_BASE_ADDR, VIRTIO0,
+    },
     param::{PAGE_SIZE, RAM_SIZE},
     trampoline::trampoline,
 };
@@ -47,8 +45,8 @@ pub enum PageTableLevel {
 pub unsafe fn set_current_page_table(pt: &'static PageTable) {
     let sv39_mode: u64 = 8 << 60;
     let pt_ppn = pt as *const PageTable as u64 >> 12;
-    Satp.write(sv39_mode | pt_ppn);
-    sfence_vma();
+    satp::write((sv39_mode | pt_ppn) as usize);
+    sfence_vma_all();
     // loop {}
 }
 

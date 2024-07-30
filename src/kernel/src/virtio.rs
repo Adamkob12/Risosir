@@ -1,4 +1,4 @@
-use crate::{arch::memlayout::VIRTIO0, cprintln};
+use crate::{cprintln, memlayout::VIRTIO0};
 use alloc::boxed::Box;
 use conquer_once::spin::OnceCell;
 use core::{arch::riscv64::wfi, mem::MaybeUninit, sync::atomic::fence};

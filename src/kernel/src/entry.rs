@@ -3,12 +3,11 @@ use core::arch::asm;
 use crate::start::start;
 
 /// The entry point for the OS, every CPU core starts here.
+/// This function will initialize the stack and call the start function.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[link_section = ".entry"]
 #[no_mangle]
 pub unsafe extern "C" fn _entry() -> ! {
-    // Initialize the stack
-
     // Read the CPU id
     asm!("csrr a0, mhartid");
     // The stack grows down, so we need the first stack to be at 1 offset

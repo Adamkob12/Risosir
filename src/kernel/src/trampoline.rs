@@ -1,4 +1,4 @@
-use crate::arch::memlayout::TRAPFRAME_VADDR;
+use crate::memlayout::TRAPFRAME_VADDR;
 use core::arch::asm;
 
 #[link_section = "trampsec"]

@@ -1,21 +1,22 @@
 use crate::{
-    arch::{
-        common::privilage::PrivLevel,
-        registers::{
-            csr::{
-                Medeleg, Mepc, Mhartid, Mideleg, Mie, Mscratch, MstatusMie, MstatusMpp, Mtvec,
-                Pmpaddr0, Pmpcfg0, Satp, Sie,
-            },
-            gpr::Tp,
-            mmapped::{Mtime, Mtimecmp},
-            AddressOf, ReadFrom, WriteInto,
-        },
-    },
+    arch::*,
     kernelvec::timervec,
     param::{NCPU, STACK_SIZE, TIMER_INTERRUPT_INTERVAL},
-    trap::{MachineInterrupt, SupervisorInterrupt},
+    trap::MachineInterrupt,
 };
 use core::{arch::asm, ptr::addr_of};
+use gpr::tp;
+use register::{
+    medeleg::{self},
+    mepc, mhartid, mideleg, mstatus, pmpaddr0, pmpcfg0, satp, sie,
+};
+
+// The function `main` is defined in main.rs, but we don't have access to it so we can't reference it directly.
+// Fortunately, it must be #[no_mangle], so we can act as though it's defined here.
+#[allow(dead_code)]
+extern "C" {
+    fn main() -> !;
+}
 
 /// The stacks of all the CPU cores combined.
 /// Each CPU core will use a part of the global stack.
@@ -29,40 +30,38 @@ static mut GLOBAL_STACK: GlobalStack = GlobalStack([0; STACK_SIZE * NCPU]);
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn start() -> ! {
     // Set Mstatus.MPP to Supervisor, so after calling `mret` we'll end up in Supervisor
-    MstatusMpp.write(PrivLevel::S);
+    mstatus::set_mpp(mstatus::MPP::Supervisor);
     // Set the Mepc to point to the main function, after calling `mret`, it will start executing.
-    #[cfg(not(feature = "test-kernel"))]
-    Mepc.write(main as u64);
-    #[cfg(feature = "test-kernel")]
-    Mepc.write(crate::test_kernel as u64);
+    mepc::write(main as usize);
     // Disabe paging for now
-    Satp.write(0);
+    satp::write(0);
     // Delegate exception and interrupt handling to S-mode
-    Medeleg.write(0xffff);
-    Mideleg.write(0xffff);
-
-    Sie.write(
-        Sie.read()
-            | SupervisorInterrupt::External.bitmask()
-            | SupervisorInterrupt::Software.bitmask()
-            | SupervisorInterrupt::Timer.bitmask(),
-    );
-    // Sie.write(Sie.read() | SIE_SEIE | SIE_SSIE);
+    medeleg::set_breakpoint();
+    medeleg::set_load_fault();
+    medeleg::set_load_fault();
+    medeleg::set_user_env_call();
+    medeleg::set_load_misaligned();
+    medeleg::set_load_page_fault();
+    medeleg::set_instruction_fault();
+    medeleg::set_illegal_instruction();
+    medeleg::set_supervisor_env_call();
+    medeleg::set_instruction_misaligned();
+    medeleg::set_instruction_page_fault();
+    mideleg::set_sext();
+    mideleg::set_ssoft();
+    mideleg::set_stimer();
+    // Allow S-mode External, Software & Timer interrupts
+    sie::set_sext();
+    sie::set_ssoft();
+    sie::set_stimer();
     // Configure Physical Memory Protection to give supervisor mode access to all of physical memory.
-    Pmpaddr0.write(0x3fffffffffffff);
-    Pmpcfg0.write(0xf);
-    // Save the hart id in TP because we won't have access to it outside of machine mode
-    let hart_id = Mhartid.read();
-    Tp.write(hart_id);
+    pmpaddr0::write(0x3fffffffffffff);
+    pmpcfg0::write(0xf);
+    // Save the hart id (AKA cpu id) in TP because we won't have access to it outside of machine mode
+    let cpuid = mhartid::read();
+    tp::write(cpuid);
 
-    // The function `main` is defined in main.rs, but we don't have access to it so we can't reference it directly.
-    // Fortunately, it must be #[no_mangle], so we can act as though it's defined here.
-    #[allow(dead_code)]
-    extern "C" {
-        fn main() -> !;
-    }
-
-    setup_timer_interrupts();
+    // setup_timer_interrupts();
 
     asm!("mret");
 
@@ -78,22 +77,20 @@ pub type DataToHandleTimerInt = [u64; 5];
 /// An instance of [`DataToHandleTimerInt`] for each hart.
 static mut TIMER_INTERRUPT_DATA: [DataToHandleTimerInt; NCPU] = [[0; 5]; NCPU];
 
-/// Set up timer interrupts
-pub unsafe fn setup_timer_interrupts() {
-    // Get hart id
-    let hart_id = Mhartid.read();
-    // Schedule the next timer interrupt to happen in `TIMER_INTERRUPT_INTERVAL` cycles.
-    Mtimecmp { hart_id }.write(Mtime.read() + TIMER_INTERRUPT_INTERVAL);
-    // Set the correct data for the timer interrupt handler
-    TIMER_INTERRUPT_DATA[hart_id as usize][3] = Mtimecmp { hart_id }.addr_of() as u64;
-    TIMER_INTERRUPT_DATA[hart_id as usize][4] = TIMER_INTERRUPT_INTERVAL;
-    // Set the mscratch register to hold a pointer to the `DataToHandleTiemrInt` for the exact hart.
-    // The mscratch register will be read when the interrupt is triggered.
-    Mscratch.write(addr_of!(TIMER_INTERRUPT_DATA[hart_id as usize]) as u64);
-    // Set all interrupts to be handled by `timervec` (will be changed later)
-    Mtvec.write(timervec as u64);
-    // Enable machine-mode interrupts
-    MstatusMie.write(true);
-    // Enable machine-mode timer interrupts
-    Mie.write(MachineInterrupt::Timer.bitmask());
-}
+// Set up timer interrupts
+// pub unsafe fn setup_timer_interrupts(cpuid: usize) {
+//     // Schedule the next timer interrupt to happen in `TIMER_INTERRUPT_INTERVAL` cycles.
+//     Mtimecmp { hart_id }.write(Mtime.read() + TIMER_INTERRUPT_INTERVAL);
+//     // Set the correct data for the timer interrupt handler
+//     TIMER_INTERRUPT_DATA[hart_id as usize][3] = Mtimecmp { hart_id }.addr_of() as u64;
+//     TIMER_INTERRUPT_DATA[hart_id as usize][4] = TIMER_INTERRUPT_INTERVAL;
+//     // Set the mscratch register to hold a pointer to the `DataToHandleTiemrInt` for the exact hart.
+//     // The mscratch register will be read when the interrupt is triggered.
+//     Mscratch.write(addr_of!(TIMER_INTERRUPT_DATA[hart_id as usize]) as u64);
+//     // Set all interrupts to be handled by `timervec` (will be changed later)
+//     Mtvec.write(timervec as u64);
+//     // Enable machine-mode interrupts
+//     MstatusMie.write(true);
+//     // Enable machine-mode timer interrupts
+//     Mie.write(MachineInterrupt::Timer.bitmask());
+// }

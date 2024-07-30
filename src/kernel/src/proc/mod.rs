@@ -1,11 +1,11 @@
 use crate::{
-    arch::memlayout::{TRAMPOLINE_VADDR, TRAPFRAME_VADDR},
     elf_parse::ParsedExecutable,
     mem::{
         alloc_frame,
         paging::{Frame, PageTable, PageTableLevel},
         virtual_mem::{PTEFlags, PhysAddr, VirtAddr},
     },
+    memlayout::{TRAMPOLINE_VADDR, TRAPFRAME_VADDR},
     param::{
         ProcId, HEAP_SIZE, HEAP_START, NPROC, PAGES_PER_HEAP, PAGES_PER_STACK, PAGE_SIZE,
         STACK_SIZE,

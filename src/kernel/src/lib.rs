@@ -38,7 +38,7 @@ fn panic(info: &PanicInfo) -> ! {
 
     cprintln!(
         "Encountered Panic (tp={}): {:#}",
-        unsafe { Tp.read() },
+        unsafe { tp::read() },
         info
     );
     loop {
@@ -63,6 +63,7 @@ pub mod fs;
 pub mod kernelvec;
 pub mod keyboard;
 pub mod mem;
+pub mod memlayout;
 pub mod param;
 pub mod plic;
 pub mod proc;
@@ -74,7 +75,7 @@ pub mod trap;
 pub mod uart;
 pub mod virtio;
 
-use arch::registers::{gpr::Tp, ReadFrom};
+use arch::gpr::tp;
 pub use console::*;
 use core::{
     arch::asm,
@@ -107,7 +108,7 @@ static STARTED: AtomicBool = AtomicBool::new(false);
 
 #[export_name = "test_kernel"]
 pub extern "C" fn test_kernel() -> ! {
-    let cpuid = unsafe { Tp.read() };
+    let cpuid = unsafe { tp::read() };
 
     if cpuid == 0 {
         unsafe { init_kernel() };

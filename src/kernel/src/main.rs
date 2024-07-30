@@ -10,33 +10,22 @@
 
 extern crate alloc;
 
-use crate::fs::FILES;
-use alloc::boxed::Box;
-use arch::registers::csr::{Satp, Sepc, Sstatus};
-use arch::registers::gpr::{Sp, T2};
-use core::arch::asm;
+use arch::gpr::tp;
+use arch::interrupt::supervisor::enable;
+use arch::register::{sie, stvec};
 use core::hint;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::{fence, Ordering};
-use elf_parse::parse_executable_file;
-use kernel::arch::common::privilage::PrivLevel;
-use kernel::arch::registers::csr::{Sie, Stvec};
-use kernel::arch::registers::WriteInto;
-use kernel::arch::registers::{gpr::Tp, ReadFrom};
 use kernel::mem::paging::KERNEL_PAGE_TABLE;
 use kernel::trampoline::trampoline;
 use kernel::trap::SupervisorInterrupt;
 use kernel::*;
 use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
-use param::ProcId;
-use proc::{Process, PROCS};
-use trap::enable_interrupts;
-
 static STARTED: AtomicBool = AtomicBool::new(false);
 
 #[export_name = "main"]
 extern "C" fn main() -> ! {
-    let hart_id = unsafe { Tp.read() };
+    let hart_id = unsafe { tp::read() };
 
     if hart_id == 0 {
         unsafe { init_kernel(hart_id) };
@@ -61,7 +50,7 @@ extern "C" fn main() -> ! {
 
 /// Will be called when the kernel is booting, only from CPU#0
 #[allow(unsafe_op_in_unsafe_fn)]
-unsafe fn init_kernel(hart_id: u64) {
+unsafe fn init_kernel(hart_id: usize) {
     console::init_console();
     cprintln!("\nBooting Kernel...");
     cprintln!("End of kernel code : {:#x}", end_of_kernel_code_section());
@@ -73,31 +62,17 @@ unsafe fn init_kernel(hart_id: u64) {
     cprintln!("Page Table has been initialized.");
     proc::init_procs();
     // Enable S-mode software, external and timer interrupts
-    Sie.write(
-        Sie.read()
-            | SupervisorInterrupt::External.bitmask()
-            | SupervisorInterrupt::Software.bitmask()
-            | SupervisorInterrupt::Timer.bitmask(),
-    );
+    sie::set_sext();
+    sie::set_ssoft();
+    sie::set_stimer();
     // Init kernel trap handler
-    Stvec.write(trap::kernelvec as u64);
+    stvec::write(trap::kernelvec as usize, stvec::TrapMode::Direct);
     plic::init_plic_global();
-    plic::init_plic_hart(hart_id, PrivLevel::S);
+    plic::init_plic_hart(hart_id);
     virtio::init_virtio();
     fs::init_files();
 
     fence(Ordering::SeqCst);
-    enable_interrupts();
+    enable();
     fence(Ordering::SeqCst);
-
-    let test = Box::leak(FILES.lock().copy_to_ram("test").unwrap());
-    let test_exe = parse_executable_file(test).unwrap();
-    let procs = PROCS.get().unwrap();
-    let test_proc_id = procs.alloc_proc("test").unwrap();
-    procs[test_proc_id].lock().activate(test_exe);
-}
-
-unsafe fn exec_proc(proc: &Process<'static>) {
-    Sstatus.write(Sstatus.read() & !(PrivLevel::U as u64));
-    Sepc.write(proc.trapframe.epc as u64);
 }

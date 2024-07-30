@@ -1,12 +1,6 @@
 use core::{ascii, fmt::Write};
 
-use crate::{
-    arch::{
-        memlayout::UART_BASE_ADDR,
-        registers::{ReadFrom, WriteInto},
-    },
-    Console, CONSOLE,
-};
+use crate::{memlayout::UART_BASE_ADDR, Console, CONSOLE};
 use spin::Mutex;
 
 /// Uart 16550

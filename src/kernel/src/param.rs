@@ -1,4 +1,4 @@
-use crate::arch::memlayout::KERNEL_BASE_ADDR;
+use crate::memlayout::KERNEL_BASE_ADDR;
 
 /// KiloByte
 pub const KB: usize = 1024;

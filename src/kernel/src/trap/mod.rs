@@ -2,12 +2,9 @@ pub mod exception;
 pub mod interrupt;
 
 use crate::{
-    arch::{
-        common::privilage::PrivLevel,
-        memlayout::{UART_IRQ, VIRTIO0_IRQ},
-        registers::{gpr::Tp, WriteInto},
-    },
+    arch::gpr::tp,
     cprintln,
+    memlayout::{UART_IRQ, VIRTIO0_IRQ},
     plic::{plic_claim, plic_complete},
     uart::uart_interrupt,
     virtio::virtio_intr,
@@ -15,56 +12,43 @@ use crate::{
 use core::arch::asm;
 pub use exception::*;
 pub use interrupt::*;
+use riscv::register::{
+    scause::{self, Interrupt},
+    stval,
+};
 
 #[no_mangle]
 pub unsafe extern "C" fn kerneltrap() {
-    use crate::arch::registers::csr::*;
-    use crate::arch::registers::ReadFrom;
-    let scause = Scause.read();
-    let hart_id = Tp.read();
-    let priv_lvl = PrivLevel::S;
+    let scause = scause::read();
+    let hart_id = tp::read();
 
-    if (scause & (1 << 63)) != 0 {
-        if (scause & 0xff) == 9 {
-            // PLIC external interrupt
-            if let Some(plic_dev_id) = plic_claim(hart_id, priv_lvl) {
-                match plic_dev_id {
-                    VIRTIO0_IRQ => virtio_intr(),
-                    UART_IRQ => uart_interrupt(),
-                    id => {
-                        panic!("PLIC - Unrecognized interrupt: {id}");
+    match scause.cause() {
+        scause::Trap::Interrupt(int) => match int {
+            Interrupt::SupervisorExternal => {
+                if let Some(plic_irq) = plic_claim(hart_id) {
+                    match plic_irq {
+                        VIRTIO0_IRQ => virtio_intr(),
+                        UART_IRQ => uart_interrupt(),
+                        id => {
+                            panic!("PLIC - Unrecognized interrupt: {id}");
+                        }
                     }
+                    plic_complete(hart_id, plic_irq);
                 }
-                plic_complete(hart_id, priv_lvl, plic_dev_id);
             }
-        } else if (scause & 0xff) == 1 {
-            Sip.write(Sip.read() & !2);
-            // Software Interrupt (came from M-mode timer)
-        } else {
-            panic!("Unexpcted Interrupt, scause = {:#b}", Scause.read());
-        }
-    } else {
-        // It's an exception
-        match scause & 0xff {
-            // 8 => {
-            //     // E-call from U-mode
-            // }
-            // 3 => {
-            //     // Breakpoint
-            //     _breakpoint();
-            //     Sepc.write(Sepc.read() + 8);
-            // }
+            Interrupt::SupervisorSoft => {}
+            int => {
+                panic!("Unrecognized interrupt: {:#?}", int)
+            }
+        },
+        scause::Trap::Exception(excp) => match excp {
             _ => panic!(
-                "Unexpected Exception in Kernel: \n\tScause={}\n\tStval={}",
-                scause,
-                Stval.read()
+                "Unexpected Exception in Kernel: \n\tScause={:#b}\n\tStval={}",
+                scause.bits(),
+                stval::read(),
             ),
-        }
+        },
     }
-}
-
-pub fn _breakpoint() {
-    cprintln!("Breakpoint");
 }
 
 #[repr(align(16))]

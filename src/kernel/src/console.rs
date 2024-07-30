@@ -1,8 +1,6 @@
-use crate::{
-    trap::without_interrupts,
-    uart::{init_uart, UART},
-};
+use crate::uart::{init_uart, UART};
 use core::ascii;
+use riscv::interrupt::free;
 use spin::Mutex;
 
 pub const CONSOLE_DEV_ID: usize = 1;
@@ -75,15 +73,6 @@ impl core::fmt::Write for Console {
     }
 }
 
-// pub fn flush_console(mut console: MutexGuard<Console>, mut uart: MutexGuard<Uart>, mut s: &str) {
-//     let mut read = 0;
-//     while read < s.len() {
-//         s = &s[read..];
-//         read += console.write_str(s);
-//         uart.sync_send_pending(&mut console);
-//     }
-// }
-
 #[macro_export]
 macro_rules! cprint {
     ($($arg:tt)*) => ($crate::_print(format_args!($($arg)*)));
@@ -98,7 +87,7 @@ macro_rules! cprintln {
 #[doc(hidden)]
 pub fn _print(args: core::fmt::Arguments) {
     use core::fmt::Write;
-    without_interrupts(|| {
+    free(|| {
         CONSOLE
             .lock()
             .write_fmt(args)
