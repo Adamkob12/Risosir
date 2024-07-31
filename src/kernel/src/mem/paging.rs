@@ -198,12 +198,6 @@ impl PageTable {
     ) -> Option<PageTableEntry> {
         va.round_down();
         pa.round_down();
-        // cprintln!(
-        //     "\nSTRONG MAP\n va: {:#x} \n pa: {:#x} \n level: {:#?}",
-        //     va.as_u64(),
-        //     pa.as_u64(),
-        //     current_level
-        // );
         let vpn = va.vpn(current_level);
         // cprintln!("vpn: {}", vpn);
         let pte = &mut self.0[vpn as usize];

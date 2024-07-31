@@ -15,6 +15,7 @@ use core::{
     ops::Deref,
     sync::atomic::{AtomicUsize, Ordering},
 };
+use elf::{endian::AnyEndian, segment::SegmentTable};
 use spin::Mutex;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -65,46 +66,36 @@ impl<'a> Process<'a> {
     pub fn activate(&mut self, exe: ParsedExecutable<'a>) {
         // The program counter needs to start at the start of the code section
         let program_counter = exe.entry_point as u64;
+        let file_base = exe.file_data.as_ptr() as usize;
+        let mut data_end = 0;
         // Map the text section (code of the process), it needs to be readable and executable
-        {
-            let text_addr = exe.text.as_ptr() as u64;
-            let text_size = exe.text.len() as u64;
-            for offset in (0..text_size).into_iter().step_by(PAGE_SIZE) {
+        for seg in exe.segs {
+            let mut flags = PTEFlags::valid();
+            if seg.p_flags & (1 << 2) != 0 {
+                flags = flags.readable();
+            }
+            if seg.p_flags & (1 << 1) != 0 {
+                flags = flags.writable();
+            }
+            if seg.p_flags & (1 << 0) != 0 {
+                flags = flags.executable();
+            }
+            let vaddr_base = seg.p_vaddr;
+            let size = seg.p_memsz;
+
+            for offset in (0..size).into_iter().step_by(PAGE_SIZE) {
                 self.page_table.strong_map(
-                    VirtAddr::from_raw(exe.text_v as u64 + offset),
-                    PhysAddr::from_raw(text_addr + offset),
-                    PTEFlags::valid().readable().executable(),
+                    VirtAddr::from_raw(vaddr_base + offset),
+                    PhysAddr::from_raw(file_base as u64 + offset),
+                    flags,
                     PageTableLevel::L2,
                 );
+            }
+
+            if seg.p_type <= 0x00000007 {
+                data_end = vaddr_base + size;
             }
         }
-        // Map the rodata section
-        {
-            let rodata_addr = exe.rodata.as_ptr() as u64;
-            let rodata_size = exe.rodata.len() as u64;
-            for offset in (0..rodata_size).into_iter().step_by(PAGE_SIZE) {
-                self.page_table.strong_map(
-                    VirtAddr::from_raw(exe.text_v as u64 + offset),
-                    PhysAddr::from_raw(rodata_addr + offset),
-                    PTEFlags::valid().readable(),
-                    PageTableLevel::L2,
-                );
-            }
-        }
-        // Map the data section
-        let data_end = {
-            let data_addr = exe.data.as_ptr() as u64;
-            let data_size = exe.data.len() as u64;
-            for offset in (0..data_size).into_iter().step_by(PAGE_SIZE) {
-                self.page_table.strong_map(
-                    VirtAddr::from_raw(exe.data_v as u64 + offset),
-                    PhysAddr::from_raw(data_addr + offset),
-                    PTEFlags::valid().readable().writable(),
-                    PageTableLevel::L2,
-                );
-            }
-            data_addr + data_size
-        };
 
         // Allocate and map the stack, take into account that we want to keep at least
         // a single non-mapped region of memory (with the size of a single page) between the
@@ -112,41 +103,42 @@ impl<'a> Process<'a> {
         // will occur and no data will be corrupted.
         let stack_pointer = {
             let stack_addr = data_end + (STACK_SIZE + PAGE_SIZE) as u64;
-            let stack_size = STACK_SIZE as u64;
-            for offset in (0..stack_size).into_iter().step_by(PAGE_SIZE) {
+            for offset in (0..STACK_SIZE as u64).into_iter().step_by(PAGE_SIZE) {
                 let frame_addr = unsafe { alloc_frame() }.unwrap().as_ptr() as u64;
-                self.page_table.strong_map(
+                if let Some(_) = self.page_table.strong_map(
                     VirtAddr::from_raw(stack_addr as u64 + offset),
                     PhysAddr::from_raw(frame_addr),
                     PTEFlags::valid().readable().writable(),
                     PageTableLevel::L2,
-                );
+                ) {
+                    panic!("Stack section overlaps with data segments");
+                }
             }
-            stack_addr + stack_size
+            stack_addr + STACK_SIZE as u64
         };
 
         // Allocate and map the heap
         {
             for offset in (0..HEAP_SIZE).into_iter().step_by(PAGE_SIZE) {
                 let frame_addr = unsafe { alloc_frame() }.unwrap().as_ptr() as u64;
-                self.page_table.strong_map(
+                if let Some(_) = self.page_table.strong_map(
                     VirtAddr::from_raw(HEAP_START + offset as u64),
                     PhysAddr::from_raw(frame_addr),
                     PTEFlags::valid().readable().writable(),
                     PageTableLevel::L2,
-                );
+                ) {
+                    panic!("Heap section overlaps with data segments");
+                }
             }
         }
 
         // map the trapframe
-        {
-            self.page_table.strong_map(
-                VirtAddr::from_raw(TRAPFRAME_VADDR as u64),
-                PhysAddr::from_raw(self.trapframe as *mut _ as u64),
-                PTEFlags::valid().readable().writable(),
-                PageTableLevel::L2,
-            );
-        }
+        self.page_table.strong_map(
+            VirtAddr::from_raw(TRAPFRAME_VADDR as u64),
+            PhysAddr::from_raw(self.trapframe as *mut _ as u64),
+            PTEFlags::valid().readable().writable(),
+            PageTableLevel::L2,
+        );
         // map the trampoline
         self.page_table.strong_map(
             VirtAddr::from_raw(TRAMPOLINE_VADDR as u64),
@@ -155,8 +147,8 @@ impl<'a> Process<'a> {
             PageTableLevel::L2,
         );
 
-        trapframe().sp = stack_pointer as usize;
-        trapframe().epc = program_counter as usize;
+        self.trapframe.sp = stack_pointer as usize;
+        self.trapframe.epc = program_counter as usize;
         self.status.store(ProcStatus::Runnable, Ordering::Relaxed);
     }
 }
@@ -190,7 +182,7 @@ impl core::ops::Index<ProcId> for ProcTable {
     }
 }
 
-fn trapframe() -> &'static mut Trapframe {
+pub fn trapframe() -> &'static mut Trapframe {
     unsafe { &mut *(TRAPFRAME_VADDR as *mut Trapframe) }
 }
 

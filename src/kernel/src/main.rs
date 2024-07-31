@@ -9,17 +9,19 @@
 
 extern crate alloc;
 
+use crate::fs::FILES;
 use arch::asm::wfi;
 use arch::gpr::tp;
-use arch::interrupt::supervisor::enable;
 use arch::register::{sie, stvec};
 use core::hint;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::{fence, Ordering};
+use elf_parse::parse_executable_file;
 use kernel::mem::paging::KERNEL_PAGE_TABLE;
 use kernel::trampoline::trampoline;
 use kernel::*;
 use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
+
 static STARTED: AtomicBool = AtomicBool::new(false);
 
 #[export_name = "main"]
@@ -67,8 +69,9 @@ unsafe fn init_kernel(hart_id: usize) {
     plic::init_plic_hart(hart_id);
     virtio::init_virtio();
     fs::init_files();
-
-    fence(Ordering::SeqCst);
-    enable();
-    fence(Ordering::SeqCst);
+    FILES.lock().ls();
+    let _ = parse_executable_file(&FILES.lock().copy_to_ram("ls").unwrap());
+    // fence(Ordering::SeqCst);
+    // enable();
+    // fence(Ordering::SeqCst);
 }
