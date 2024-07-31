@@ -1,6 +1,5 @@
-use core::arch::asm;
-
 use crate::start::start;
+use core::arch::asm;
 
 /// The entry point for the OS, every CPU core starts here.
 /// This function will initialize the stack and call the start function.

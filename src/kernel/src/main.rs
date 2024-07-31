@@ -1,6 +1,5 @@
 #![feature(custom_test_frameworks)]
 #![allow(internal_features)]
-#![reexport_test_harness_main = "test_main"]
 #![allow(static_mut_refs)]
 #![test_runner(kernel::test_runner)]
 #![no_std]
@@ -22,10 +21,11 @@ use kernel::*;
 use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
 static STARTED: AtomicBool = AtomicBool::new(false);
 
-#[export_name = "main"]
+#[no_mangle]
 extern "C" fn main() -> ! {
+    cprintln!("main");
     let cpuid = unsafe { tp::read() };
-
+    cprintln!("Starting CPU #{}", cpuid);
     if cpuid == 0 {
         unsafe { init_kernel(cpuid) };
         // The kernel has officially booted
@@ -37,7 +37,7 @@ extern "C" fn main() -> ! {
         }
     }
     if STARTED.load(Ordering::SeqCst) {
-        cprintln!("Hello from CPU #{}", cpuid);
+        cprintln!("Finished booting CPU #{}", cpuid);
         loop {
             hint::spin_loop();
         }
@@ -49,8 +49,6 @@ extern "C" fn main() -> ! {
 /// Will be called when the kernel is booting, only from CPU#0
 #[allow(unsafe_op_in_unsafe_fn)]
 unsafe fn init_kernel(hart_id: usize) {
-    console::init_console();
-    cprintln!("\nBooting Kernel...");
     cprintln!("End of kernel code : {:#x}", end_of_kernel_code_section());
     cprintln!("Trampoline frame   : {:#x}", trampoline as u64);
     cprintln!("End of kernel data : {:#x}", end_of_kernel_data_section());

@@ -1,5 +1,6 @@
 use crate::{
     arch::*,
+    cprintln,
     kernelvec::timervec,
     memlayout::MTIMECMP_ADDR,
     param::{NCPU, STACK_SIZE, TIMER_INTERRUPT_INTERVAL},
@@ -27,6 +28,9 @@ pub unsafe fn start() -> ! {
     // Set Mstatus.MPP to Supervisor, so after calling `mret` we'll end up in Supervisor
     mstatus::set_mpp(mstatus::MPP::Supervisor);
     // Set the Mepc to point to the main function, after calling `mret`, it will start executing.
+    #[cfg(not(feature = "test-kernel"))]
+    mepc::write(main as usize);
+    #[cfg(feature = "test-kernel")]
     mepc::write(main as usize);
     // Disabe paging for now
     satp::write(0);
@@ -56,6 +60,11 @@ pub unsafe fn start() -> ! {
     // Save the hart id (AKA cpu id) in TP because we won't have access to it outside of machine mode
     let cpuid = mhartid::read();
     tp::write(cpuid);
+    // Init the console for logging info
+    if cpuid == 0 {
+        unsafe { crate::console::init_console() };
+        cprintln!("\nBooting Kernel...");
+    }
 
     // The function `main` is defined in main.rs, but we don't have access to it so we can't reference it directly.
     // Fortunately, it must be #[no_mangle], so we can act as though it's defined here.

@@ -13,7 +13,6 @@
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     use core::hint;
-
     // unsafe {
     //     UART.force_unlock();
     //     CONSOLE.force_unlock();
@@ -46,12 +45,6 @@ fn panic(info: &PanicInfo) -> ! {
     }
 }
 
-pub const TESTS: &[&dyn Test] = &[&trivial_test];
-
-fn trivial_test() {
-    assert_eq!(1, 1);
-}
-
 extern crate alloc;
 
 pub mod arch;
@@ -76,16 +69,7 @@ pub mod virtio;
 
 use arch::gpr::tp;
 pub use console::*;
-use core::{
-    arch::asm,
-    panic::PanicInfo,
-    sync::atomic::{AtomicBool, Ordering},
-};
-use mem::{
-    init_kernel_allocator,
-    paging::{init_kernel_page_table, set_current_page_table, KERNEL_PAGE_TABLE},
-};
-use proc::init_procs;
+use core::panic::PanicInfo;
 
 extern "C" {
     fn end();
@@ -101,73 +85,4 @@ pub fn end_of_kernel_data_section() -> usize {
 /// (includes trampoline)
 pub fn end_of_kernel_code_section() -> usize {
     etext as usize
-}
-
-static STARTED: AtomicBool = AtomicBool::new(false);
-
-#[export_name = "test_kernel"]
-pub extern "C" fn test_kernel() -> ! {
-    let cpuid = unsafe { tp::read() };
-
-    if cpuid == 0 {
-        unsafe { init_kernel() };
-        // The kernel has officially booted
-        test_runner(TESTS);
-        cprintln!("\n");
-        cprintln!("All Tests Passed.");
-    }
-    while !STARTED.load(Ordering::SeqCst) {
-        // Wait for CPU #0 to set up the kernel properly
-    }
-    cprintln!("Hello from Hart #{}", cpuid,);
-    loop {
-        unsafe { asm!("wfi") };
-    }
-}
-
-/// Will be called when the kernel is booting, only from CPU#0
-#[allow(unsafe_op_in_unsafe_fn)]
-unsafe fn init_kernel() {
-    init_console();
-    cprintln!("\nBooting Kernel...");
-    cprintln!("End of kernel code={:#x}", end_of_kernel_code_section());
-    cprintln!("End of kernel data={:#x}", end_of_kernel_data_section());
-    init_kernel_allocator();
-    init_kernel_page_table();
-    set_current_page_table(&KERNEL_PAGE_TABLE);
-    init_procs();
-}
-
-pub fn test_runner(tests: &[&dyn Test]) {
-    cprintln!();
-    cprintln!("~~~~~~~~~ Running {} tests ~~~~~~~~~", tests.len());
-    cprintln!();
-    for test in tests {
-        test.execute_test();
-    }
-    cprintln!();
-    cprintln!("~~~~~~~~~ All tests passed ~~~~~~~~~");
-}
-
-pub trait Test {
-    fn name(&self) -> &'static str;
-    fn run(&self);
-    fn execute_test(&self) {
-        cprintln!("RUNNING TEST: {}...", self.name());
-        self.run();
-        cprintln!("[ok]");
-    }
-}
-
-impl<T> Test for T
-where
-    T: Fn(),
-{
-    fn name(&self) -> &'static str {
-        core::any::type_name::<T>()
-    }
-
-    fn run(&self) {
-        self();
-    }
 }
