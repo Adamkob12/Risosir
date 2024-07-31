@@ -1,6 +1,6 @@
 use crate::uart::{init_uart, UART};
 use core::ascii;
-use riscv::interrupt::free;
+use riscv::interrupt::supervisor::free;
 use spin::Mutex;
 
 pub const CONSOLE_DEV_ID: usize = 1;
@@ -16,7 +16,9 @@ pub struct Console {
 pub static CONSOLE: Mutex<Console> = Mutex::new(Console::new());
 
 pub unsafe fn init_console() {
+    let c = CONSOLE.lock();
     unsafe { init_uart() };
+    drop(c);
 }
 
 impl Console {
@@ -87,10 +89,8 @@ macro_rules! cprintln {
 #[doc(hidden)]
 pub fn _print(args: core::fmt::Arguments) {
     use core::fmt::Write;
+    let mut con = CONSOLE.lock();
     free(|| {
-        CONSOLE
-            .lock()
-            .write_fmt(args)
-            .expect("Couldn't write to console");
+        con.write_fmt(args).expect("Couldn't write to console");
     });
 }

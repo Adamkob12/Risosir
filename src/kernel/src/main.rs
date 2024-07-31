@@ -9,6 +9,7 @@
 
 extern crate alloc;
 
+use arch::asm::wfi;
 use arch::gpr::tp;
 use arch::interrupt::supervisor::enable;
 use arch::register::{sie, stvec};
@@ -21,18 +22,17 @@ use kernel::*;
 use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
 static STARTED: AtomicBool = AtomicBool::new(false);
 
-#[no_mangle]
+#[export_name = "main"]
 extern "C" fn main() -> ! {
-    cprintln!("main");
     let cpuid = unsafe { tp::read() };
-    cprintln!("Starting CPU #{}", cpuid);
+    cprintln!("Started booting CPU #{}", cpuid);
     if cpuid == 0 {
         unsafe { init_kernel(cpuid) };
         // The kernel has officially booted
         STARTED.store(true, Ordering::SeqCst);
     } else {
         while !STARTED.load(Ordering::SeqCst) {
-            // unsafe { asm!("wfi") };
+            wfi()
             // Wait for CPU #0 to set up the kernel properly
         }
     }

@@ -25,11 +25,11 @@ static mut GLOBAL_STACK: GlobalStack = GlobalStack([0; STACK_SIZE * NCPU]);
 #[allow(unsafe_op_in_unsafe_fn)]
 #[no_mangle]
 pub unsafe fn start() -> ! {
-    // Set Mstatus.MPP to Supervisor, so after calling `mret` we'll end up in Supervisor
+    // Set Mstatus.MPP to Supervisor, so after calling `mret` we'll end up in S-mode
     mstatus::set_mpp(mstatus::MPP::Supervisor);
     // Set the Mepc to point to the main function, after calling `mret`, it will start executing.
     #[cfg(not(feature = "test-kernel"))]
-    mepc::write(main as usize);
+    mepc::write(main as u64 as usize);
     #[cfg(feature = "test-kernel")]
     mepc::write(main as usize);
     // Disabe paging for now
@@ -72,7 +72,7 @@ pub unsafe fn start() -> ! {
         fn main() -> !;
     }
 
-    // setup_timer_interrupts(cpuid);
+    setup_timer_interrupts(cpuid);
 
     asm!("mret");
 
