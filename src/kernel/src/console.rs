@@ -89,8 +89,10 @@ macro_rules! cprintln {
 #[doc(hidden)]
 pub fn _print(args: core::fmt::Arguments) {
     use core::fmt::Write;
-    let mut con = CONSOLE.lock();
     free(|| {
-        con.write_fmt(args).expect("Couldn't write to console");
+        CONSOLE
+            .lock()
+            .write_fmt(args)
+            .expect("Couldn't write to console");
     });
 }

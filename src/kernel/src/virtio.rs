@@ -364,7 +364,6 @@ pub fn virtio_intr() {
     let mut current_idx = disk.used_idxs;
     while current_idx < disk.used_ring.idx {
         fence(core::sync::atomic::Ordering::SeqCst);
-        cprintln!("Current idx: {}", current_idx);
         // let head_desc_id = disk.used_ring.ring[current_idx as usize % VIRTQ_CAP].desc_id as u16;
         // match disk.statuses[head_desc_id as usize] {
         //     0 => {}

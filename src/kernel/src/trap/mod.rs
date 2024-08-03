@@ -3,7 +3,7 @@ pub mod interrupt;
 
 use crate::{
     arch::registers::*,
-    cprintln,
+    cprint, cprintln,
     memlayout::{UART_IRQ, VIRTIO0_IRQ},
     plic::{plic_claim, plic_complete},
     uart::uart_interrupt,
@@ -27,8 +27,12 @@ pub unsafe extern "C" fn kerneltrap() {
             Interrupt::SupervisorExternal => {
                 if let Some(plic_irq) = plic_claim(hart_id) {
                     match plic_irq {
-                        VIRTIO0_IRQ => virtio_intr(),
-                        UART_IRQ => uart_interrupt(),
+                        VIRTIO0_IRQ => {
+                            virtio_intr();
+                        }
+                        UART_IRQ => {
+                            uart_interrupt();
+                        }
                         id => {
                             panic!("PLIC - Unrecognized interrupt: {id}");
                         }

@@ -6,15 +6,14 @@
 
 extern crate alloc;
 
-use crate::fs::FILES;
 use arch::asm::wfi;
 use arch::interrupts::s_enable;
 use arch::registers::tp;
 use arch::registers::{sie, stvec};
 use core::hint;
+use core::ptr::addr_of;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::*;
-use elf_parse::parse_executable_file;
 use kernel::mem::paging::KERNEL_PAGE_TABLE;
 use kernel::trampoline::trampoline;
 use kernel::*;
@@ -35,13 +34,13 @@ extern "C" fn main() -> ! {
             wfi()
             // Wait for CPU #0 to set up the kernel properly
         }
-        unsafe { mem::paging::set_current_page_table(&KERNEL_PAGE_TABLE) };
-        plic::init_plic_hart(hart_id);
+        // unsafe { mem::paging::set_current_page_table(addr_of!(KERNEL_PAGE_TABLE) as usize) };
+        // plic::init_plic_hart(hart_id);
     }
     if STARTED.load(Ordering::SeqCst) {
         cprintln!("Finished booting CPU #{}", hart_id);
         loop {
-            hint::spin_loop();
+            wfi();
         }
     } else {
         panic!("Something up with the ordering of instructions");
@@ -51,14 +50,12 @@ extern "C" fn main() -> ! {
 /// Will be called when the kernel is booting, only from CPU#0
 #[allow(unsafe_op_in_unsafe_fn)]
 unsafe fn init_kernel(hart_id: usize) {
-    unsafe { crate::console::init_console() };
     cprintln!("End of kernel code : {:#x}", end_of_kernel_code_section());
     cprintln!("Trampoline frame   : {:#x}", trampoline as u64);
     cprintln!("End of kernel data : {:#x}", end_of_kernel_data_section());
     mem::init_kernel_allocator();
     mem::paging::init_kernel_page_table();
-    #[allow(static_mut_refs)]
-    mem::paging::set_current_page_table(&KERNEL_PAGE_TABLE);
+    mem::paging::set_current_page_table(addr_of!(KERNEL_PAGE_TABLE) as usize);
     cprintln!("Page Table has been initialized.");
     proc::init_procs();
     // Enable S-mode software, external and timer interrupts

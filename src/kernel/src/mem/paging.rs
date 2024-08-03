@@ -39,9 +39,9 @@ pub enum PageTableLevel {
 
 /// Updates the current page table in a safe way
 /// The given page table must be valid and safe to use
-pub unsafe fn set_current_page_table(pt: &'static PageTable) {
+pub unsafe fn set_current_page_table(pt: usize) {
     let sv39_mode: u64 = 8 << 60;
-    let pt_ppn = pt as *const PageTable as u64 >> 12;
+    let pt_ppn = pt as u64 >> 12;
     satp::write((sv39_mode | pt_ppn) as usize);
     sfence_vma_all();
     // loop {}

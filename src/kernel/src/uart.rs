@@ -1,6 +1,6 @@
 use core::ascii;
 
-use crate::{memlayout::UART_BASE_ADDR, Console, CONSOLE};
+use crate::{cprintln, memlayout::UART_BASE_ADDR, Console, CONSOLE};
 use spin::Mutex;
 
 /// Uart 16550

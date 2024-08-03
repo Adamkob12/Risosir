@@ -1,6 +1,6 @@
 use crate::{
     arch::*,
-    cprintln,
+    cprint, cprintln,
     kernelvec::timervec,
     memlayout::MTIMECMP_ADDR,
     param::{NCPU, STACK_SIZE, TIMER_INTERRUPT_INTERVAL},
@@ -57,13 +57,17 @@ pub unsafe fn start() -> ! {
     let cpuid = mhartid::read();
     tp::write(cpuid);
 
+    if cpuid == 0 {
+        unsafe { crate::console::init_console() };
+    }
+
     // The function `main` is defined in main.rs, but we don't have access to it so we can't reference it directly.
     // Fortunately, it must be #[no_mangle], so we can act as though it's defined here.
     extern "C" {
         fn main() -> !;
     }
 
-    setup_timer_interrupts(cpuid);
+    setup_timer_interrupts();
 
     asm!("mret");
 
@@ -80,15 +84,16 @@ pub type DataToHandleTimerInt = [usize; 5];
 static mut TIMER_INTERRUPT_DATA: [DataToHandleTimerInt; NCPU] = [[0; 5]; NCPU];
 
 /// Set up timer interrupts
-pub unsafe fn setup_timer_interrupts(cpuid: usize) {
+pub unsafe fn setup_timer_interrupts() {
+    let hart_id = tp::read();
     // Schedule the next timer interrupt to happen in `TIMER_INTERRUPT_INTERVAL` cycles.
-    mtimecmp::write(cpuid, mtime::read() + TIMER_INTERRUPT_INTERVAL);
+    mtimecmp::write(hart_id, mtime::read() + TIMER_INTERRUPT_INTERVAL);
     // Set the correct data for the timer interrupt handler
-    TIMER_INTERRUPT_DATA[cpuid][3] = MTIMECMP_ADDR + 8 * cpuid;
-    TIMER_INTERRUPT_DATA[cpuid][4] = TIMER_INTERRUPT_INTERVAL;
+    TIMER_INTERRUPT_DATA[hart_id][3] = MTIMECMP_ADDR + 8 * hart_id;
+    TIMER_INTERRUPT_DATA[hart_id][4] = TIMER_INTERRUPT_INTERVAL;
     // Set the mscratch register to hold a pointer to the `DataToHandleTiemrInt` for the exact hart.
     // The mscratch register will be read when the interrupt is triggered.
-    mscratch::write(addr_of!(TIMER_INTERRUPT_DATA[cpuid]) as usize);
+    mscratch::write(addr_of!(TIMER_INTERRUPT_DATA[hart_id]) as usize);
     // Set all interrupts to be handled by `timervec` (will be changed later)
     mtvec::write(timervec as usize, mtvec::TrapMode::Direct);
     // Enable machine-mode interrupts
