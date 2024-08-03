@@ -1,6 +1,6 @@
 use crate::{
     arch::*,
-    cprint, cprintln,
+    cprintln,
     kernelvec::timervec,
     memlayout::MTIMECMP_ADDR,
     param::{NCPU, STACK_SIZE, TIMER_INTERRUPT_INTERVAL},
@@ -24,10 +24,7 @@ pub unsafe fn start() -> ! {
     // Set Mstatus.MPP to Supervisor, so after calling `mret` we'll end up in S-mode
     mstatus::set_mpp(mstatus::MPP::Supervisor);
     // Set the Mepc to point to the main function, after calling `mret`, it will start executing.
-    #[cfg(not(feature = "test-kernel"))]
     mepc::write(main as u64 as usize);
-    #[cfg(feature = "test-kernel")]
-    mepc::write(main as usize);
     // Disabe paging for now
     satp::write(0);
     // Delegate exception to S-Mode
@@ -59,6 +56,7 @@ pub unsafe fn start() -> ! {
 
     if cpuid == 0 {
         unsafe { crate::console::init_console() };
+        cprintln!("Booting Kernel");
     }
 
     // The function `main` is defined in main.rs, but we don't have access to it so we can't reference it directly.
