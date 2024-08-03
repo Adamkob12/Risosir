@@ -75,8 +75,6 @@ impl Process {
         let pt: &mut PageTable = Box::leak(unsafe { Box::new_zeroed().assume_init() });
         let tf: &mut Trapframe = Box::leak(unsafe { Box::new_zeroed().assume_init() });
         let ks: &mut [u8; STACK_SIZE] = Box::leak(unsafe { Box::new_zeroed().assume_init() });
-        cprintln!("{}", tf as *mut _ as usize);
-        cprintln!("{}", pt as *mut _ as usize);
         Process {
             name: Cell::new(INACTIVE_PROC_NAME),
             id,
@@ -122,23 +120,26 @@ impl Process {
             // Map the text section (code of the process), it needs to be readable and executable
             for seg in exe.segs {
                 // cprintln!("{:#?}", seg);
-                let mut flags = PTEFlags::valid();
-                if seg.p_flags & (1 << 2) != 0 {
-                    flags = flags.readable();
-                }
-                if seg.p_flags & (1 << 1) != 0 {
-                    flags = flags.writable();
-                }
-                if seg.p_flags & (1 << 0) != 0 {
-                    flags = flags.executable();
-                }
+                let flags = PTEFlags::valid()
+                    .readable()
+                    .writable()
+                    .executable()
+                    .userable();
+                // if seg.p_flags & (1 << 2) != 0 {
+                //     flags = flags.readable();
+                // }
+                // if seg.p_flags & (1 << 1) != 0 {
+                //     flags = flags.writable();
+                // }
+                // if seg.p_flags & (1 << 0) != 0 {
+                //     flags = flags.executable();
+                // }
                 let vaddr_base = seg.p_vaddr;
                 let size = seg.p_memsz;
 
                 for offset in (0..size).into_iter().step_by(PAGE_SIZE) {
                     let va = vaddr_base + offset;
-                    let pa = file_base as u64 + offset;
-                    // cprintln!("{:#x} -> {:#x} | {:#?}", va, pa, flags);
+                    let pa = file_base as u64 + offset + seg.p_offset;
                     pt.strong_map(
                         VirtAddr::from_raw(va),
                         PhysAddr::from_raw(pa),
@@ -204,7 +205,6 @@ impl Process {
 
             tf.sp = stack_pointer as usize;
             tf.epc = program_counter as usize;
-            pt.debug("\t", 0);
         } else {
             panic!("Can't activate Unused or Active Proc");
         }

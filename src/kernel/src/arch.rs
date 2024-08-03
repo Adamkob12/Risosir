@@ -25,6 +25,7 @@ pub mod _arch {
     pub mod registers {
         pub mod gpr {
             impl_gpr_rw!(tp, "tp");
+            impl_gpr_rw!(s3, "s3");
             impl_gpr_rw!(ra, "ra");
             impl_gpr_rw!(sp, "sp");
         }

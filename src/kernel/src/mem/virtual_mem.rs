@@ -147,6 +147,10 @@ impl PTEFlags {
         PTEFlags(self.0 | PageTableEntry::X_FLAG_MASK)
     }
 
+    pub fn userable(self) -> Self {
+        PTEFlags(self.0 | PageTableEntry::U_FLAG_MASK)
+    }
+
     pub fn is_valid(&self) -> bool {
         (self.0 & PageTableEntry::V_FLAG_MASK) > 0
     }

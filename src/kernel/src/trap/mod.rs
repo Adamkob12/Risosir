@@ -2,7 +2,7 @@ pub mod exception;
 pub mod interrupt;
 
 use crate::arch::interrupts::*;
-use crate::arch::registers::tp;
+use crate::arch::registers::{s3, tp};
 use crate::cpu::cproc;
 use crate::mem::paging::{make_satp, translate};
 use crate::mem::virtual_mem::{PTEFlags, PhysAddr, VirtAddr};
@@ -36,6 +36,17 @@ extern "C" {
 /// The first function that should be executed when a new process in created.
 /// This function should be called while still in s-mode, and with the kernel page table.
 pub fn user_proc_entry() {
+    let proc = cproc();
+    cprintln!(
+        "HHH: {:#x}",
+        translate(
+            &proc.pagetable(),
+            VirtAddr::from_raw(0x1000),
+            crate::mem::paging::PageTableLevel::L2,
+            PTEFlags::valid().executable().readable().writable(),
+        )
+        .as_u64()
+    );
     user_trap_return();
 }
 
@@ -57,6 +68,7 @@ fn user_trap_return() -> ! {
 
     unsafe {
         sstatus::set_spp(sstatus::SPP::User);
+        sstatus::set_spie();
         sepc::write(tf.epc);
         stvec::write(
             TRAMPOLINE_VADDR + (uservec as usize - trampoline as usize),
@@ -66,7 +78,6 @@ fn user_trap_return() -> ! {
 
         let userret_addr = TRAMPOLINE_VADDR + (userret as usize - trampoline as usize);
         let userret_fn: extern "C" fn(usize) -> ! = core::mem::transmute(userret_addr);
-        // cprintln!("USERRET: {:#x}", userret_addr);
 
         userret_fn(make_satp(proc.page_table as usize))
     }
@@ -91,6 +102,7 @@ fn device_interrupt(hart_id: usize) {
 
 #[no_mangle]
 pub unsafe extern "C" fn usertrap() {
+    cprintln!("USERTRAP");
     let scause = scause::read();
     let hart_id = cpuid();
     // cprintln!("{}", cproc().trapframe().t1);
@@ -98,6 +110,7 @@ pub unsafe extern "C" fn usertrap() {
         scause::Trap::Interrupt(int) => match int {
             Interrupt::SupervisorExternal => device_interrupt(hart_id),
             Interrupt::SupervisorSoft => {
+                cprintln!("User Timer Int");
                 let sip: usize;
                 asm!("csrr {x}, sip", x = out(reg) sip);
                 asm!("csrw sip, {x}", x = in(reg) (sip & !2));
@@ -127,8 +140,7 @@ pub unsafe extern "C" fn kerneltrap() {
         scause::Trap::Interrupt(int) => match int {
             Interrupt::SupervisorExternal => device_interrupt(hart_id),
             Interrupt::SupervisorSoft => {
-                cprintln!("Timer Int! (cpuid={})", cpuid());
-                cprintln!("tf.t1={}", cproc().trapframe().t1);
+                cprintln!("Kernel Timer Int");
                 let sip: usize;
                 asm!("csrr {x}, sip", x = out(reg) sip);
                 asm!("csrw sip, {x}", x = in(reg) (sip & !2));

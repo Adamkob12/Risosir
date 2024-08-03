@@ -1,4 +1,5 @@
-use crate::{cprint, cprintln, virtio::read_from_disk};
+use crate::{cprint, cprintln, mem::paging::Page, param::PAGE_SIZE, virtio::read_from_disk};
+use aligned_vec::AVec;
 use alloc::{boxed::Box, vec::Vec};
 use core::{
     ascii,
@@ -55,11 +56,16 @@ impl FileTable {
     /// Frames that contain the file data.
     pub fn copy_to_ram(&self, file_name: &str) -> Option<Box<[u8]>> {
         let file_meta = self.get_file_meta(file_name)?;
-        let data_segs = file_meta.size as usize / FILE_DATA_SIZE + 1;
-        let mut file_data_segs: Vec<FileDataSeg> = Vec::with_capacity(data_segs);
+        let pages = file_meta.size as usize / PAGE_SIZE + 2;
+        let file_frames: Box<[Page]> = unsafe { Box::new_zeroed_slice(pages).assume_init() };
+        let file_frames: Box<[[u8; PAGE_SIZE]]> = unsafe { transmute(file_frames) };
+        let mut file_data = file_frames.into_vec().into_flattened();
         let head_node_id = file_meta.node_list_start;
         let mut current_node_id = head_node_id;
-        for _ in 0..data_segs {
+        for seg in (0..file_meta.size as usize)
+            .into_iter()
+            .step_by(FILE_DATA_SIZE)
+        {
             let mut node: Node = unsafe { core::mem::transmute([0u8; 1024]) };
             read_node(&mut node, current_node_id);
             #[cfg(debug_assertions)]
@@ -68,13 +74,18 @@ impl FileTable {
                 current_node_id,
                 node.next_node
             );
-            file_data_segs.push(node.data);
+            file_data[seg..(seg + FILE_DATA_SIZE)].copy_from_slice(&node.data);
             current_node_id = node.next_node;
         }
-        let mut file_data = file_data_segs.into_flattened();
+        // let mut file_data = file_data_segs.into_flattened();
+        // let mut file_data = file_data_segs_a.into_flattened();
         file_data.truncate(file_meta.size as usize);
         #[cfg(debug_assertions)]
-        cprintln!("Done copying file {} to ram", file_name);
+        cprintln!(
+            "Done copying file {} to ram. The file is in {:#x}",
+            file_name,
+            file_data.as_ptr() as usize
+        );
         Some(file_data.into_boxed_slice())
     }
 
