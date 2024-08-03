@@ -40,7 +40,6 @@ pub unsafe extern "C" fn kerneltrap() {
                 }
             }
             Interrupt::SupervisorSoft => {
-                // sip::clear_ssoft(); : CURRENTLY BUGGED (0.11.1), UNCOMMENT ON NEXT RELEASE
                 let sip: usize;
                 asm!("csrr {x}, sip", x = out(reg) sip);
                 asm!("csrw sip, {x}", x = in(reg) (sip & !2))

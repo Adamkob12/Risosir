@@ -2,6 +2,7 @@ use crate::{cprintln, memlayout::VIRTIO0};
 use alloc::boxed::Box;
 use conquer_once::spin::OnceCell;
 use core::{mem::MaybeUninit, sync::atomic::fence};
+use riscv::asm::wfi;
 use spin::Mutex;
 
 //
@@ -76,6 +77,8 @@ pub const VIRTIO_BLK_F_RO: u32 = 1 << 5;
 pub const VIRTIO_BLK_F_CONFIG_WCE: u32 = 1 << 11;
 /// Block size of disk is in blk_size.
 pub const VIRTIO_BLK_F_BLK_SIZE: u32 = 1 << 6;
+pub const VIRTIO_BLK_F_RING_INDIRECT_DESC: u32 = 1 << 28;
+pub const VIRTIO_BLK_F_RING_EVENT_IDX: u32 = 1 << 29;
 
 // Request types of the block device -- Section 5.2.6 of the spec
 
@@ -186,6 +189,8 @@ pub fn init_virtio() {
     cprintln!("{:#32b}", features);
     features &= !(VIRTIO_BLK_F_RO);
     features &= !(VIRTIO_BLK_F_CONFIG_WCE);
+    features &= !(VIRTIO_BLK_F_RING_EVENT_IDX);
+    features &= !(VIRTIO_BLK_F_RING_INDIRECT_DESC);
     // write the negotiated features back to the device
     w_virtio_register::<VIRTIO_MMIO_DRIVER_FEATURES>(features);
 
@@ -336,7 +341,7 @@ pub fn read_from_disk(sector: u64, data: &mut [u8; 1024]) -> Result<(), u8> {
 
     loop {
         match status {
-            0xff => continue,
+            0xff => wfi(),
             s => {
                 let mut disk = DISK.get().unwrap().lock();
                 disk.free_desc_chain(head_desc_chain);
@@ -357,7 +362,7 @@ pub fn virtio_intr() {
     w_virtio_register::<VIRTIO_MMIO_INTERRUPT_ACK>(
         r_virtio_register::<VIRTIO_MMIO_INTERRUPT_STATUS>() & 0x3,
     );
-    // cprintln!("virtio intr");
+    cprintln!("virtio intr");
 
     fence(core::sync::atomic::Ordering::SeqCst);
 

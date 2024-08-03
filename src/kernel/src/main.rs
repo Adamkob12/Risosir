@@ -6,6 +6,7 @@
 
 extern crate alloc;
 
+use crate::fs::FILES;
 use arch::asm::wfi;
 use arch::interrupts::s_enable;
 use arch::registers::stvec;
@@ -32,19 +33,20 @@ extern "C" fn main() -> ! {
         while !STARTED.load(Ordering::SeqCst) {
             wfi()
         }
-    }
-    if STARTED.load(Ordering::SeqCst) {
-        cprintln!("Finished booting CPU #{}", hart_id);
         unsafe { mem::paging::set_current_page_table(addr_of!(KERNEL_PAGE_TABLE) as usize) };
         plic::init_plic_hart(hart_id);
         // Init kernel trap handler
         unsafe { stvec::write(trap::kernelvec as usize, stvec::TrapMode::Direct) };
-        unsafe { s_enable() };
-        loop {
-            wfi();
-        }
-    } else {
-        panic!("Something up with the ordering of instructions");
+        cprintln!("Finished booting CPU #{}", hart_id);
+    }
+
+    unsafe { s_enable() };
+    if hart_id == 0 {
+        let _ = FILES.lock().copy_to_ram("ls").unwrap();
+    }
+
+    loop {
+        wfi();
     }
 }
 
@@ -58,9 +60,12 @@ unsafe fn init_kernel() {
     mem::paging::init_kernel_page_table();
     mem::paging::set_current_page_table(addr_of!(KERNEL_PAGE_TABLE) as usize);
     cprintln!("Page Table has been initialized.");
+    // Init kernel trap handler
+    stvec::write(trap::kernelvec as usize, stvec::TrapMode::Direct);
     proc::init_procs();
     // Enable S-mode software, external and timer interrupts
     plic::init_plic_global();
+    plic::init_plic_hart(0);
     virtio::init_virtio();
     fs::init_files();
 }
