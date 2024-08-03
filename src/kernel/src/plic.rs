@@ -1,3 +1,4 @@
+use riscv::register::mstatus::MPP;
 use riscv_peripheral::plic::claim::CLAIM;
 
 use crate::memlayout::{
@@ -20,11 +21,19 @@ pub fn init_plic_global() {
     };
 }
 
+fn context_id(hart_id: usize, mode: MPP) -> usize {
+    match mode {
+        MPP::Supervisor => hart_id + 1,
+        MPP::Machine => hart_id + 0,
+        MPP::User => panic!("User doesn't have plic context"),
+    }
+}
+
 /// Basic inititializatin of the PLIC for the current core
 /// Enables this core to recieve UART and VIRTIO
 /// Only for S-Mode
 pub fn init_plic_hart(hart_id: usize) {
-    let context_id = hart_id;
+    let context_id = context_id(hart_id, MPP::Supervisor);
 
     let p = (PLIC_ENABLE_BASE + context_id as usize * 0x80) as *mut u32;
     unsafe { p.write_volatile((1 << UART_IRQ) | (1 << VIRTIO0_IRQ)) };
@@ -36,7 +45,7 @@ pub fn init_plic_hart(hart_id: usize) {
 
 /// Returns `Some(device_id)` if the claim for this target was successful
 pub fn plic_claim(hart_id: usize) -> Option<usize> {
-    let context_id = hart_id;
+    let context_id = context_id(hart_id, MPP::Supervisor);
     let p = (PLIC_CLAIM_BASE + context_id as usize * 0x1000) as *mut u32;
 
     match unsafe { p.read_volatile() } {
@@ -47,7 +56,7 @@ pub fn plic_claim(hart_id: usize) -> Option<usize> {
 
 /// Signal that we completed servicing the interrupt
 pub fn plic_complete(hart_id: usize, irq: usize) {
-    let context_id = hart_id;
+    let context_id = context_id(hart_id, MPP::Supervisor);
     let p = (PLIC_CLAIM_BASE + context_id as usize * 0x1000) as *mut u32;
     unsafe { p.write_volatile(irq as u32) };
 }

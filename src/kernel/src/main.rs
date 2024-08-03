@@ -8,10 +8,10 @@ extern crate alloc;
 
 use crate::fs::FILES;
 use arch::asm::wfi;
-use arch::gpr::tp;
-use arch::register::{sie, stvec};
+use arch::interrupts::s_enable;
+use arch::registers::tp;
+use arch::registers::{sie, stvec};
 use core::hint;
-use core::ptr::addr_of;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::*;
 use elf_parse::parse_executable_file;
@@ -24,10 +24,10 @@ static STARTED: AtomicBool = AtomicBool::new(false);
 
 #[export_name = "main"]
 extern "C" fn main() -> ! {
-    let cpuid = unsafe { tp::read() };
-    cprintln!("Started booting CPU #{}", cpuid);
-    if cpuid == 0 {
-        unsafe { init_kernel(cpuid) };
+    let hart_id = unsafe { tp::read() };
+    cprintln!("Started booting CPU #{}", hart_id);
+    if hart_id == 0 {
+        unsafe { init_kernel(hart_id) };
         // The kernel has officially booted
         STARTED.store(true, Ordering::SeqCst);
     } else {
@@ -35,9 +35,11 @@ extern "C" fn main() -> ! {
             wfi()
             // Wait for CPU #0 to set up the kernel properly
         }
+        unsafe { mem::paging::set_current_page_table(&KERNEL_PAGE_TABLE) };
+        plic::init_plic_hart(hart_id);
     }
     if STARTED.load(Ordering::SeqCst) {
-        cprintln!("Finished booting CPU #{}", cpuid);
+        cprintln!("Finished booting CPU #{}", hart_id);
         loop {
             hint::spin_loop();
         }
@@ -49,11 +51,13 @@ extern "C" fn main() -> ! {
 /// Will be called when the kernel is booting, only from CPU#0
 #[allow(unsafe_op_in_unsafe_fn)]
 unsafe fn init_kernel(hart_id: usize) {
+    unsafe { crate::console::init_console() };
     cprintln!("End of kernel code : {:#x}", end_of_kernel_code_section());
     cprintln!("Trampoline frame   : {:#x}", trampoline as u64);
     cprintln!("End of kernel data : {:#x}", end_of_kernel_data_section());
     mem::init_kernel_allocator();
     mem::paging::init_kernel_page_table();
+    #[allow(static_mut_refs)]
     mem::paging::set_current_page_table(&KERNEL_PAGE_TABLE);
     cprintln!("Page Table has been initialized.");
     proc::init_procs();
@@ -67,9 +71,10 @@ unsafe fn init_kernel(hart_id: usize) {
     plic::init_plic_hart(hart_id);
     virtio::init_virtio();
     fs::init_files();
-    FILES.lock().ls();
-    let _ = parse_executable_file(&FILES.lock().copy_to_ram("ls").unwrap());
-    // fence(Ordering::SeqCst);
-    // enable();
-    // fence(Ordering::SeqCst);
+    // FILES.lock().ls();
+    // let _ = parse_executable_file(&FILES.lock().copy_to_ram("ls").unwrap());
+
+    fence(Ordering::SeqCst);
+    s_enable();
+    fence(Ordering::SeqCst);
 }

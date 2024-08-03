@@ -67,7 +67,7 @@ pub mod trap;
 pub mod uart;
 pub mod virtio;
 
-use arch::gpr::tp;
+use arch::registers::tp;
 pub use console::*;
 use core::panic::PanicInfo;
 

@@ -15,7 +15,6 @@ use core::{
     ops::Deref,
     sync::atomic::{AtomicUsize, Ordering},
 };
-use elf::{endian::AnyEndian, segment::SegmentTable};
 use spin::Mutex;
 
 #[derive(Clone, Copy, PartialEq, Eq)]

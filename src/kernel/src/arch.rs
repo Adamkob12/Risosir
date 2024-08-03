@@ -19,9 +19,21 @@ macro_rules! impl_gpr_rw {
 
 #[cfg(target_arch = "riscv64")]
 pub mod _arch {
-    pub use riscv::*;
-    pub mod gpr {
-        impl_gpr_rw!(tp, "tp");
+    pub mod asm {
+        pub use riscv::asm::*;
+    }
+    pub mod registers {
+        pub mod gpr {
+            impl_gpr_rw!(tp, "tp");
+        }
+        pub use gpr::*;
+        pub use riscv::register::*;
+    }
+    pub mod interrupts {
+        pub use riscv::interrupt::supervisor::disable as s_disable;
+        pub use riscv::interrupt::supervisor::enable as s_enable;
+        pub use riscv::interrupt::supervisor::free as s_without_interrupts;
+        pub use riscv::interrupt::supervisor::nested as s_with_interrupts;
     }
     pub mod clint {
         pub mod mtime {

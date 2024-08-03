@@ -2,7 +2,8 @@ pub mod exception;
 pub mod interrupt;
 
 use crate::{
-    arch::gpr::tp,
+    arch::registers::*,
+    cprintln,
     memlayout::{UART_IRQ, VIRTIO0_IRQ},
     plic::{plic_claim, plic_complete},
     uart::uart_interrupt,
@@ -35,7 +36,10 @@ pub unsafe extern "C" fn kerneltrap() {
                     plic_complete(hart_id, plic_irq);
                 }
             }
-            Interrupt::SupervisorSoft => {}
+            Interrupt::SupervisorSoft => {
+                cprintln!("Timer Interrupt!");
+                sip::clear_ssoft();
+            }
             int => {
                 panic!("Unrecognized interrupt: {:#?}", int)
             }

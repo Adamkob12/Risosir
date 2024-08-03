@@ -7,11 +7,7 @@ use crate::{
 };
 use clint::{mtime, mtimecmp};
 use core::{arch::asm, ptr::addr_of};
-use gpr::tp;
-use register::{
-    medeleg::{self},
-    mepc, mhartid, mideleg, mie, mscratch, mstatus, mtvec, pmpaddr0, pmpcfg0, satp, sie,
-};
+use registers::*;
 
 /// The stacks of all the CPU cores combined.
 /// Each CPU core will use a part of the global stack.
@@ -60,11 +56,6 @@ pub unsafe fn start() -> ! {
     // Save the hart id (AKA cpu id) in TP because we won't have access to it outside of machine mode
     let cpuid = mhartid::read();
     tp::write(cpuid);
-    // Init the console for logging info
-    if cpuid == 0 {
-        unsafe { crate::console::init_console() };
-        cprintln!("\nBooting Kernel...");
-    }
 
     // The function `main` is defined in main.rs, but we don't have access to it so we can't reference it directly.
     // Fortunately, it must be #[no_mangle], so we can act as though it's defined here.
