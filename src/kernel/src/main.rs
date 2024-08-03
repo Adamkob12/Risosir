@@ -1,7 +1,4 @@
-#![feature(custom_test_frameworks)]
 #![allow(internal_features)]
-#![allow(static_mut_refs)]
-#![test_runner(kernel::test_runner)]
 #![no_std]
 #![no_main]
 #![feature(ascii_char)]
@@ -14,8 +11,9 @@ use arch::asm::wfi;
 use arch::gpr::tp;
 use arch::register::{sie, stvec};
 use core::hint;
+use core::ptr::addr_of;
 use core::sync::atomic::AtomicBool;
-use core::sync::atomic::{fence, Ordering};
+use core::sync::atomic::*;
 use elf_parse::parse_executable_file;
 use kernel::mem::paging::KERNEL_PAGE_TABLE;
 use kernel::trampoline::trampoline;
