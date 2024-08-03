@@ -18,7 +18,7 @@ pub static mut KERNEL_PAGE_TABLE: PageTable = PageTable::zeroed();
 #[repr(C, align(4096))]
 pub struct Frame([u8; PAGE_SIZE]);
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[repr(C, align(4096))]
 #[allow(dead_code)]
 pub struct Page([u8; PAGE_SIZE]);
@@ -46,7 +46,6 @@ pub fn make_satp(pt_addr: usize) -> usize {
 /// Updates the current page table in a safe way
 /// The given page table must be valid and safe to use
 pub unsafe fn set_current_page_table(pt: usize) {
-    sfence_vma_all();
     satp::write(make_satp(pt) as usize);
     sfence_vma_all();
 }
@@ -105,7 +104,7 @@ pub unsafe fn init_kernel_page_table() {
     KERNEL_PAGE_TABLE.strong_map(
         VirtAddr::from_raw(TRAMPOLINE_VADDR as u64),
         PhysAddr::from_raw(trampoline as u64),
-        PTEFlags::valid().readable().writable().executable(),
+        PTEFlags::valid().readable().executable(),
         PageTableLevel::L2,
     );
 

@@ -1,4 +1,4 @@
-use crate::{cprintln, memlayout::VIRTIO0};
+use crate::memlayout::VIRTIO0;
 use alloc::boxed::Box;
 use conquer_once::spin::OnceCell;
 use core::{mem::MaybeUninit, sync::atomic::fence};

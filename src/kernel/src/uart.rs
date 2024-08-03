@@ -25,7 +25,6 @@ const DLM: u8 = 1;
 /// Uart FCR register, write-only
 const FCR: u8 = 2;
 /// Uart ISR register, read-only
-const ISR: u8 = 2;
 /// Uart THR register, only available when DLAB is off
 pub const THR: u8 = 0;
 /// Uart RHR register, only available when DLAB is off
@@ -112,6 +111,7 @@ pub fn uart_interrupt() {
     let mut console = CONSOLE.lock();
     let mut uart = UART.lock();
     // let mut kb = KEYBOARD.lock();
+
     while let Some(key) = unsafe { uart.get_next() } {
         console
             .write_char(ascii::Char::from_u8(key).unwrap())

@@ -4,11 +4,13 @@ pub mod interrupt;
 use crate::arch::interrupts::*;
 use crate::arch::registers::tp;
 use crate::cpu::cproc;
-use crate::mem::paging::make_satp;
-use crate::memlayout::TRAMPOLINE_VADDR;
+use crate::mem::paging::{make_satp, translate};
+use crate::mem::virtual_mem::{PTEFlags, PhysAddr, VirtAddr};
+use crate::memlayout::{TRAMPOLINE_VADDR, TRAPFRAME_VADDR};
 use crate::param::STACK_SIZE;
 use crate::proc::ProcStatus;
 use crate::trampoline::trampoline;
+use crate::{cprint, cprintln};
 use crate::{
     memlayout::{UART_IRQ, VIRTIO0_IRQ},
     plic::{plic_claim, plic_complete},
@@ -39,33 +41,82 @@ pub fn user_proc_entry() {
 
 fn user_trap_return() -> ! {
     s_disable();
+    // cprintln!("User trap return!");
     let proc = cproc();
 
     #[cfg(debug_assertions)]
     assert_eq!(proc.status.load(Ordering::SeqCst), ProcStatus::Running);
 
     // SAFETY: if the process is running, the trapframe of the process can only be accessed by the CPU that's running the process.
-    let tf = &mut unsafe { *proc.trapframe };
+    let tf = unsafe { proc.trapframe.as_mut().unwrap() };
     tf.kernel_satp = satp::read().bits();
     tf.kernel_hartid = tp::read();
     tf.kernel_sp = proc.kernel_stack as usize + STACK_SIZE;
     tf.kernel_trap = usertrap as usize;
+    tf.a4 = 0x69;
 
     unsafe {
         sstatus::set_spp(sstatus::SPP::User);
-        sstatus::set_spie();
         sepc::write(tf.epc);
         stvec::write(
             TRAMPOLINE_VADDR + (uservec as usize - trampoline as usize),
             stvec::TrapMode::Direct,
         );
+        // cprintln!("{:#?}", proc.trapframe());
 
-        userret(make_satp(proc.page_table as usize))
+        let userret_addr = TRAMPOLINE_VADDR + (userret as usize - trampoline as usize);
+        let userret_fn: extern "C" fn(usize) -> ! = core::mem::transmute(userret_addr);
+        // cprintln!("USERRET: {:#x}", userret_addr);
+
+        userret_fn(make_satp(proc.page_table as usize))
+    }
+}
+
+fn device_interrupt(hart_id: usize) {
+    if let Some(plic_irq) = plic_claim(hart_id) {
+        match plic_irq {
+            VIRTIO0_IRQ => {
+                virtio_intr();
+            }
+            UART_IRQ => {
+                uart_interrupt();
+            }
+            id => {
+                panic!("PLIC - Unrecognized interrupt: {id}");
+            }
+        }
+        plic_complete(hart_id, plic_irq);
     }
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn usertrap() {}
+pub unsafe extern "C" fn usertrap() {
+    let scause = scause::read();
+    let hart_id = cpuid();
+    // cprintln!("{}", cproc().trapframe().t1);
+    match scause.cause() {
+        scause::Trap::Interrupt(int) => match int {
+            Interrupt::SupervisorExternal => device_interrupt(hart_id),
+            Interrupt::SupervisorSoft => {
+                let sip: usize;
+                asm!("csrr {x}, sip", x = out(reg) sip);
+                asm!("csrw sip, {x}", x = in(reg) (sip & !2));
+            }
+            int => {
+                panic!("Unrecognized interrupt: {:#?}", int)
+            }
+        },
+        scause::Trap::Exception(excp) => match excp {
+            _ => panic!(
+                "Unexpected Exception in User Mode: \n\tScause={:#b}\n\tStval={}",
+                scause.bits(),
+                stval::read(),
+            ),
+        },
+    }
+
+    user_trap_return();
+}
 
 #[no_mangle]
 pub unsafe extern "C" fn kerneltrap() {
@@ -74,26 +125,13 @@ pub unsafe extern "C" fn kerneltrap() {
 
     match scause.cause() {
         scause::Trap::Interrupt(int) => match int {
-            Interrupt::SupervisorExternal => {
-                if let Some(plic_irq) = plic_claim(hart_id) {
-                    match plic_irq {
-                        VIRTIO0_IRQ => {
-                            virtio_intr();
-                        }
-                        UART_IRQ => {
-                            uart_interrupt();
-                        }
-                        id => {
-                            panic!("PLIC - Unrecognized interrupt: {id}");
-                        }
-                    }
-                    plic_complete(hart_id, plic_irq);
-                }
-            }
+            Interrupt::SupervisorExternal => device_interrupt(hart_id),
             Interrupt::SupervisorSoft => {
+                cprintln!("Timer Int! (cpuid={})", cpuid());
+                cprintln!("tf.t1={}", cproc().trapframe().t1);
                 let sip: usize;
                 asm!("csrr {x}, sip", x = out(reg) sip);
-                asm!("csrw sip, {x}", x = in(reg) (sip & !2))
+                asm!("csrw sip, {x}", x = in(reg) (sip & !2));
             }
             int => {
                 panic!("Unrecognized interrupt: {:#?}", int)

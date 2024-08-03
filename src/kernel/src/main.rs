@@ -20,6 +20,9 @@ use kernel::mem::paging::KERNEL_PAGE_TABLE;
 use kernel::trampoline::trampoline;
 use kernel::*;
 use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
+use mem::paging::{translate, Page};
+use mem::virtual_mem::{PTEFlags, VirtAddr};
+use memlayout::TRAPFRAME_VADDR;
 use param::{ProcId, NPROC, STACK_SIZE};
 use proc::{cpuid, proc, procs};
 use trap::user_proc_entry;
@@ -32,6 +35,7 @@ extern "C" fn main() -> ! {
     cprintln!("Started booting CPU #{}", hart_id);
     if hart_id == 0 {
         unsafe { init_kernel() };
+        cprintln!("Finished booting CPU #{}", hart_id);
         // The kernel has officially booted
         STARTED.store(true, Ordering::SeqCst);
     } else {
@@ -45,38 +49,46 @@ extern "C" fn main() -> ! {
         cprintln!("Finished booting CPU #{}", hart_id);
     }
 
-    unsafe { s_enable() };
     if hart_id == 0 {
         let data = FILES.lock().copy_to_ram("test").unwrap();
         let pid = procs().alloc_proc("test").unwrap();
         let exe = parse_executable_file(&data).unwrap();
         proc(pid).activate(exe);
-    }
 
-    loop {
-        for proc_id in 0..NPROC {
-            let proc = proc(proc_id as ProcId);
-            if proc
-                .status
-                .compare_exchange(
-                    proc::ProcStatus::Runnable,
-                    proc::ProcStatus::Running,
-                    Ordering::SeqCst,
-                    Ordering::SeqCst,
-                )
-                .is_ok()
-            {
-                cprintln!("Running Proc {}: {}", proc_id, proc.name());
-                ccpu().current_proc = proc.id;
-                unsafe {
-                    ra::write(user_proc_entry as usize);
-                    sp::write(proc.kernel_stack as usize + STACK_SIZE);
-                    asm!("ret");
+        // unsafe { s_enable() };
+        loop {
+            for proc_id in 0..NPROC {
+                let proc = proc(proc_id as ProcId);
+                if proc
+                    .status
+                    .compare_exchange(
+                        proc::ProcStatus::Runnable,
+                        proc::ProcStatus::Running,
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
+                    )
+                    .is_ok()
+                {
+                    cprintln!(
+                        "CPU {} is Running Proc {}: {}",
+                        cpuid(),
+                        proc_id,
+                        proc.name()
+                    );
+                    ccpu().current_proc = proc.id;
+                    unsafe {
+                        sp::write(proc.kernel_stack as usize + STACK_SIZE);
+                        ra::write(user_proc_entry as usize);
+                        asm!("ret");
+                    }
                 }
             }
-        }
 
-        wfi();
+            wfi();
+        }
+    }
+    loop {
+        wfi()
     }
 }
 
@@ -99,4 +111,5 @@ unsafe fn init_kernel() {
     plic::init_plic_hart(0);
     virtio::init_virtio();
     files::init_files();
+    cprintln!("Finished booting CPU #{}", 0);
 }

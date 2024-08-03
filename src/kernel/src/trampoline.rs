@@ -18,7 +18,7 @@ pub unsafe extern "C" fn trampoline() -> ! {
 
         asm!(
             // save user a0 in sscratch so
-            // a0 can be used to get at TRAPFRAME
+            // a0 can be used to get TRAPFRAME
             "csrw sscratch, a0",
             // each process has a separate p.trapframe memory area,
             // but it's mapped to the same virtual address

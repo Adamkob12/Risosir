@@ -1,4 +1,5 @@
 use crate::arch::interrupts::s_without_interrupts;
+use crate::cprintln;
 use crate::{
     arch::registers::tp,
     elf_parse::ParsedExecutable,
@@ -74,6 +75,8 @@ impl Process {
         let pt: &mut PageTable = Box::leak(unsafe { Box::new_zeroed().assume_init() });
         let tf: &mut Trapframe = Box::leak(unsafe { Box::new_zeroed().assume_init() });
         let ks: &mut [u8; STACK_SIZE] = Box::leak(unsafe { Box::new_zeroed().assume_init() });
+        cprintln!("{}", tf as *mut _ as usize);
+        cprintln!("{}", pt as *mut _ as usize);
         Process {
             name: Cell::new(INACTIVE_PROC_NAME),
             id,
@@ -118,6 +121,7 @@ impl Process {
             let mut data_end = 0;
             // Map the text section (code of the process), it needs to be readable and executable
             for seg in exe.segs {
+                // cprintln!("{:#?}", seg);
                 let mut flags = PTEFlags::valid();
                 if seg.p_flags & (1 << 2) != 0 {
                     flags = flags.readable();
@@ -132,9 +136,12 @@ impl Process {
                 let size = seg.p_memsz;
 
                 for offset in (0..size).into_iter().step_by(PAGE_SIZE) {
+                    let va = vaddr_base + offset;
+                    let pa = file_base as u64 + offset;
+                    // cprintln!("{:#x} -> {:#x} | {:#?}", va, pa, flags);
                     pt.strong_map(
-                        VirtAddr::from_raw(vaddr_base + offset),
-                        PhysAddr::from_raw(file_base as u64 + offset),
+                        VirtAddr::from_raw(va),
+                        PhysAddr::from_raw(pa),
                         flags,
                         PageTableLevel::L2,
                     );
@@ -197,6 +204,7 @@ impl Process {
 
             tf.sp = stack_pointer as usize;
             tf.epc = program_counter as usize;
+            pt.debug("\t", 0);
         } else {
             panic!("Can't activate Unused or Active Proc");
         }
