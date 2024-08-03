@@ -1,6 +1,6 @@
 use core::ascii;
 
-use crate::{cprintln, memlayout::UART_BASE_ADDR, Console, CONSOLE};
+use crate::{arch::registers::tp, cprint, cprintln, memlayout::UART_BASE_ADDR, Console, CONSOLE};
 use spin::Mutex;
 
 /// Uart 16550
@@ -110,6 +110,7 @@ impl Uart {
 }
 
 pub fn uart_interrupt() {
+    // cprint!("tp={}", tp::read());
     let mut console = CONSOLE.lock();
     let mut uart = UART.lock();
     // let mut kb = KEYBOARD.lock();

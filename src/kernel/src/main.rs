@@ -23,15 +23,15 @@ static STARTED: AtomicBool = AtomicBool::new(false);
 
 #[export_name = "main"]
 extern "C" fn main() -> ! {
-    let hart_id = unsafe { tp::read() };
+    let hart_id = tp::read();
     cprintln!("Started booting CPU #{}", hart_id);
     if hart_id == 0 {
-        unsafe { init_kernel(hart_id) };
+        unsafe { init_kernel() };
         // The kernel has officially booted
         STARTED.store(true, Ordering::SeqCst);
     } else {
         while !STARTED.load(Ordering::SeqCst) {
-            wfi()
+            // wfi()
             // Wait for CPU #0 to set up the kernel properly
         }
         // unsafe { mem::paging::set_current_page_table(addr_of!(KERNEL_PAGE_TABLE) as usize) };
@@ -39,6 +39,11 @@ extern "C" fn main() -> ! {
     }
     if STARTED.load(Ordering::SeqCst) {
         cprintln!("Finished booting CPU #{}", hart_id);
+        unsafe { mem::paging::set_current_page_table(addr_of!(KERNEL_PAGE_TABLE) as usize) };
+        plic::init_plic_hart(hart_id);
+        // Init kernel trap handler
+        unsafe { stvec::write(trap::kernelvec as usize, stvec::TrapMode::Direct) };
+        unsafe { s_enable() };
         loop {
             wfi();
         }
@@ -49,7 +54,7 @@ extern "C" fn main() -> ! {
 
 /// Will be called when the kernel is booting, only from CPU#0
 #[allow(unsafe_op_in_unsafe_fn)]
-unsafe fn init_kernel(hart_id: usize) {
+unsafe fn init_kernel() {
     cprintln!("End of kernel code : {:#x}", end_of_kernel_code_section());
     cprintln!("Trampoline frame   : {:#x}", trampoline as u64);
     cprintln!("End of kernel data : {:#x}", end_of_kernel_data_section());
@@ -59,19 +64,7 @@ unsafe fn init_kernel(hart_id: usize) {
     cprintln!("Page Table has been initialized.");
     proc::init_procs();
     // Enable S-mode software, external and timer interrupts
-    sie::set_sext();
-    sie::set_ssoft();
-    sie::set_stimer();
-    // Init kernel trap handler
-    stvec::write(trap::kernelvec as usize, stvec::TrapMode::Direct);
     plic::init_plic_global();
-    plic::init_plic_hart(hart_id);
     virtio::init_virtio();
     fs::init_files();
-    // FILES.lock().ls();
-    // let _ = parse_executable_file(&FILES.lock().copy_to_ram("ls").unwrap());
-
-    fence(Ordering::SeqCst);
-    s_enable();
-    fence(Ordering::SeqCst);
 }

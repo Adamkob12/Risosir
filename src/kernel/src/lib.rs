@@ -35,11 +35,7 @@ fn panic(info: &PanicInfo) -> ! {
     //     uart.put_char(b'\n');
     // };
 
-    cprintln!(
-        "Encountered Panic (tp={}): {:#}",
-        unsafe { tp::read() },
-        info
-    );
+    cprintln!("Encountered Panic (tp={}): {:#}", tp::read(), info);
     loop {
         hint::spin_loop();
     }

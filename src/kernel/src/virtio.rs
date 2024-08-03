@@ -357,7 +357,7 @@ pub fn virtio_intr() {
     w_virtio_register::<VIRTIO_MMIO_INTERRUPT_ACK>(
         r_virtio_register::<VIRTIO_MMIO_INTERRUPT_STATUS>() & 0x3,
     );
-    cprintln!("virtio intr");
+    // cprintln!("virtio intr");
 
     fence(core::sync::atomic::Ordering::SeqCst);
 
