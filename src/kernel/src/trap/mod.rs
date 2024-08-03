@@ -3,7 +3,6 @@ pub mod interrupt;
 
 use crate::{
     arch::registers::*,
-    cprintln,
     memlayout::{UART_IRQ, VIRTIO0_IRQ},
     plic::{plic_claim, plic_complete},
     uart::uart_interrupt,
@@ -41,9 +40,10 @@ pub unsafe extern "C" fn kerneltrap() {
                 }
             }
             Interrupt::SupervisorSoft => {
-                cprintln!("Timer Interrupt!");
                 // sip::clear_ssoft(); : CURRENTLY BUGGED (0.11.1), UNCOMMENT ON NEXT RELEASE
-                asm!("csrrw a0, sip, a0");
+                let sip: usize;
+                asm!("csrr {x}, sip", x = out(reg) sip);
+                asm!("csrw sip, {x}", x = in(reg) (sip & !2))
             }
             int => {
                 panic!("Unrecognized interrupt: {:#?}", int)

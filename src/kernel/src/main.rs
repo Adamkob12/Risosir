@@ -8,9 +8,8 @@ extern crate alloc;
 
 use arch::asm::wfi;
 use arch::interrupts::s_enable;
+use arch::registers::stvec;
 use arch::registers::tp;
-use arch::registers::{sie, stvec};
-use core::hint;
 use core::ptr::addr_of;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::*;

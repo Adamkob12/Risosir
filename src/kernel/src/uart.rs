@@ -1,6 +1,6 @@
 use core::ascii;
 
-use crate::{arch::registers::tp, cprint, cprintln, memlayout::UART_BASE_ADDR, Console, CONSOLE};
+use crate::{memlayout::UART_BASE_ADDR, Console, CONSOLE};
 use spin::Mutex;
 
 /// Uart 16550
