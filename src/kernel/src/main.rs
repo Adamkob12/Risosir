@@ -42,7 +42,7 @@ extern "C" fn main() -> ! {
 
     unsafe { s_enable() };
     if hart_id == 0 {
-        let _ = FILES.lock().copy_to_ram("ls").unwrap();
+        // let _ = FILES.lock().copy_to_ram("ls").unwrap();
     }
 
     loop {
@@ -60,9 +60,10 @@ unsafe fn init_kernel() {
     mem::paging::init_kernel_page_table();
     mem::paging::set_current_page_table(addr_of!(KERNEL_PAGE_TABLE) as usize);
     cprintln!("Page Table has been initialized.");
+    proc::init_procs();
+    assert_eq!(proc::procs().alloc_proc("kernel").unwrap(), 0);
     // Init kernel trap handler
     stvec::write(trap::kernelvec as usize, stvec::TrapMode::Direct);
-    proc::init_procs();
     // Enable S-mode software, external and timer interrupts
     plic::init_plic_global();
     plic::init_plic_hart(0);

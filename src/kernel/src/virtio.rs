@@ -185,8 +185,8 @@ pub fn init_virtio() {
 
     // 4) Negotiate features
     let mut features = r_virtio_register::<VIRTIO_MMIO_DEV_FEATURES>();
-    #[cfg(debug_assertions)]
-    cprintln!("{:#32b}", features);
+    // #[cfg(debug_assertions)]
+    // cprintln!("{:#32b}", features);
     features &= !(VIRTIO_BLK_F_RO);
     features &= !(VIRTIO_BLK_F_CONFIG_WCE);
     features &= !(VIRTIO_BLK_F_RING_EVENT_IDX);
@@ -362,7 +362,6 @@ pub fn virtio_intr() {
     w_virtio_register::<VIRTIO_MMIO_INTERRUPT_ACK>(
         r_virtio_register::<VIRTIO_MMIO_INTERRUPT_STATUS>() & 0x3,
     );
-    cprintln!("virtio intr");
 
     fence(core::sync::atomic::Ordering::SeqCst);
 

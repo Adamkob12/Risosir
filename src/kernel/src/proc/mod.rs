@@ -10,12 +10,10 @@ use crate::{
     trampoline::trampoline,
 };
 use alloc::boxed::Box;
-use conquer_once::spin::OnceCell;
 use core::{
-    ops::Deref,
+    cell::Cell,
     sync::atomic::{AtomicUsize, Ordering},
 };
-use spin::Mutex;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(usize)]
@@ -26,147 +24,189 @@ pub enum ProcStatus {
     Running = 3,
 }
 
+#[repr(transparent)]
 pub struct AtomicProcStatus(AtomicUsize);
 
-pub struct Process<'p> {
+pub struct Process {
     /// The name of the process, inactive processes are named "X"
-    name: &'p str,
+    name: Cell<&'static str>,
     /// Indexes [`ProcTable`]
     id: ProcId,
     /// The status of the process
     status: AtomicProcStatus,
-    pub page_table: &'p mut PageTable,
-    pub trapframe: &'p mut Trapframe,
+    /// After [`init_procs`] is called, must be valid.
+    page_table: *mut PageTable,
+    /// After [`init_procs`] is called, must be valid.
+    trapframe: *mut Trapframe,
 }
 
 const INACTIVE_PROC_NAME: &str = "X";
 
-pub struct ProcTable([Mutex<Process<'static>>; NPROC]);
+pub struct ProcTable([Process; NPROC]);
 
-pub static PROCS: OnceCell<ProcTable> = OnceCell::uninit();
+pub static mut PROCS_ADDR: usize = 0;
 
-pub unsafe fn init_procs() {
-    PROCS.init_once(|| ProcTable::new());
+pub fn init_procs() {
+    let procs = Box::leak::<'static>(Box::new(ProcTable(core::array::from_fn(|idx| {
+        Process::new_inactive(idx as u8)
+    }))));
+    unsafe { PROCS_ADDR = procs as *mut _ as usize };
 }
 
-impl<'a> Process<'a> {
-    pub fn new_inactive(id: ProcId) -> Self {
+pub fn procs<'a>() -> &'a ProcTable {
+    unsafe { &*(PROCS_ADDR as *const _) }
+}
+
+pub fn proc<'a>(id: ProcId) -> &'a Process {
+    &procs()[id]
+}
+
+impl Process {
+    fn new_inactive(id: ProcId) -> Self {
         let pt: &mut PageTable = Box::leak(unsafe { Box::new_zeroed().assume_init() });
         let tf: &mut Trapframe = Box::leak(unsafe { Box::new_zeroed().assume_init() });
         Process {
-            name: INACTIVE_PROC_NAME,
+            name: Cell::new(INACTIVE_PROC_NAME),
             id,
             status: AtomicProcStatus::new(ProcStatus::Unused),
-            page_table: pt,
-            trapframe: tf,
+            page_table: pt as *mut PageTable,
+            trapframe: tf as *mut Trapframe,
         }
     }
 
-    pub fn activate(&mut self, exe: ParsedExecutable<'a>) {
-        // The program counter needs to start at the start of the code section
-        let program_counter = exe.entry_point as u64;
-        let file_base = exe.file_data.as_ptr() as usize;
-        let mut data_end = 0;
-        // Map the text section (code of the process), it needs to be readable and executable
-        for seg in exe.segs {
-            let mut flags = PTEFlags::valid();
-            if seg.p_flags & (1 << 2) != 0 {
-                flags = flags.readable();
-            }
-            if seg.p_flags & (1 << 1) != 0 {
-                flags = flags.writable();
-            }
-            if seg.p_flags & (1 << 0) != 0 {
-                flags = flags.executable();
-            }
-            let vaddr_base = seg.p_vaddr;
-            let size = seg.p_memsz;
+    pub fn pagetable<'a>(&'a self) -> &'a PageTable {
+        unsafe { self.page_table.as_ref() }
+            .expect("init_procs wasn't called before trying to access the process")
+    }
 
-            for offset in (0..size).into_iter().step_by(PAGE_SIZE) {
-                self.page_table.strong_map(
-                    VirtAddr::from_raw(vaddr_base + offset),
-                    PhysAddr::from_raw(file_base as u64 + offset),
-                    flags,
-                    PageTableLevel::L2,
-                );
-            }
+    pub fn trapframe<'a>(&'a self) -> &'a Trapframe {
+        unsafe { self.trapframe.as_ref() }
+            .expect("init_procs wasn't called before trying to access the process")
+    }
 
-            if seg.p_type <= 0x00000007 {
-                data_end = vaddr_base + size;
-            }
-        }
-
-        // Allocate and map the stack, take into account that we want to keep at least
-        // a single non-mapped region of memory (with the size of a single page) between the
-        // stack and the data, so in case of a stack overflow, a stack overflow exception
-        // will occur and no data will be corrupted.
-        let stack_pointer = {
-            let stack_addr = data_end + (STACK_SIZE + PAGE_SIZE) as u64;
-            for offset in (0..STACK_SIZE as u64).into_iter().step_by(PAGE_SIZE) {
-                let frame_addr = unsafe { alloc_frame() }.unwrap().as_ptr() as u64;
-                if let Some(_) = self.page_table.strong_map(
-                    VirtAddr::from_raw(stack_addr as u64 + offset),
-                    PhysAddr::from_raw(frame_addr),
-                    PTEFlags::valid().readable().writable(),
-                    PageTableLevel::L2,
-                ) {
-                    panic!("Stack section overlaps with data segments");
-                }
-            }
-            stack_addr + STACK_SIZE as u64
-        };
-
-        // Allocate and map the heap
+    pub fn activate<'a>(&self, exe: ParsedExecutable<'a>) {
+        if self
+            .status
+            .compare_exchange(
+                ProcStatus::Inactive,
+                ProcStatus::Runnable,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            )
+            .is_ok()
         {
-            for offset in (0..HEAP_SIZE).into_iter().step_by(PAGE_SIZE) {
-                let frame_addr = unsafe { alloc_frame() }.unwrap().as_ptr() as u64;
-                if let Some(_) = self.page_table.strong_map(
-                    VirtAddr::from_raw(HEAP_START + offset as u64),
-                    PhysAddr::from_raw(frame_addr),
-                    PTEFlags::valid().readable().writable(),
-                    PageTableLevel::L2,
-                ) {
-                    panic!("Heap section overlaps with data segments");
+            let pt = unsafe { self.page_table.as_mut().unwrap() };
+            let tf = unsafe { self.trapframe.as_mut().unwrap() };
+            // The program counter needs to start at the start of the code section
+            let program_counter = exe.entry_point as u64;
+            let file_base = exe.file_data.as_ptr() as usize;
+            let mut data_end = 0;
+            // Map the text section (code of the process), it needs to be readable and executable
+            for seg in exe.segs {
+                let mut flags = PTEFlags::valid();
+                if seg.p_flags & (1 << 2) != 0 {
+                    flags = flags.readable();
+                }
+                if seg.p_flags & (1 << 1) != 0 {
+                    flags = flags.writable();
+                }
+                if seg.p_flags & (1 << 0) != 0 {
+                    flags = flags.executable();
+                }
+                let vaddr_base = seg.p_vaddr;
+                let size = seg.p_memsz;
+
+                for offset in (0..size).into_iter().step_by(PAGE_SIZE) {
+                    pt.strong_map(
+                        VirtAddr::from_raw(vaddr_base + offset),
+                        PhysAddr::from_raw(file_base as u64 + offset),
+                        flags,
+                        PageTableLevel::L2,
+                    );
+                }
+
+                if seg.p_type <= 0x00000007 {
+                    data_end = vaddr_base + size;
                 }
             }
+
+            // Allocate and map the stack, take into account that we want to keep at least
+            // a single non-mapped region of memory (with the size of a single page) between the
+            // stack and the data, so in case of a stack overflow, a stack overflow exception
+            // will occur and no data will be corrupted.
+            let stack_pointer = {
+                let stack_addr = data_end + (STACK_SIZE + PAGE_SIZE) as u64;
+                for offset in (0..STACK_SIZE as u64).into_iter().step_by(PAGE_SIZE) {
+                    let frame_addr = unsafe { alloc_frame() }.unwrap().as_ptr() as u64;
+                    if let Some(_) = pt.strong_map(
+                        VirtAddr::from_raw(stack_addr as u64 + offset),
+                        PhysAddr::from_raw(frame_addr),
+                        PTEFlags::valid().readable().writable(),
+                        PageTableLevel::L2,
+                    ) {
+                        panic!("Stack section overlaps with data segments");
+                    }
+                }
+                stack_addr + STACK_SIZE as u64
+            };
+
+            // Allocate and map the heap
+            {
+                for offset in (0..HEAP_SIZE).into_iter().step_by(PAGE_SIZE) {
+                    let frame_addr = unsafe { alloc_frame() }.unwrap().as_ptr() as u64;
+                    if let Some(_) = pt.strong_map(
+                        VirtAddr::from_raw(HEAP_START + offset as u64),
+                        PhysAddr::from_raw(frame_addr),
+                        PTEFlags::valid().readable().writable(),
+                        PageTableLevel::L2,
+                    ) {
+                        panic!("Heap section overlaps with data segments");
+                    }
+                }
+            }
+
+            // map the trapframe
+            pt.strong_map(
+                VirtAddr::from_raw(TRAPFRAME_VADDR as u64),
+                PhysAddr::from_raw(self.trapframe as u64),
+                PTEFlags::valid().readable().writable(),
+                PageTableLevel::L2,
+            );
+            // map the trampoline
+            pt.strong_map(
+                VirtAddr::from_raw(TRAMPOLINE_VADDR as u64),
+                PhysAddr::from_raw(trampoline as u64),
+                PTEFlags::valid().readable().executable(),
+                PageTableLevel::L2,
+            );
+
+            tf.sp = stack_pointer as usize;
+            tf.epc = program_counter as usize;
+        } else {
+            panic!("Can't activate Unused or Active Proc");
         }
-
-        // map the trapframe
-        self.page_table.strong_map(
-            VirtAddr::from_raw(TRAPFRAME_VADDR as u64),
-            PhysAddr::from_raw(self.trapframe as *mut _ as u64),
-            PTEFlags::valid().readable().writable(),
-            PageTableLevel::L2,
-        );
-        // map the trampoline
-        self.page_table.strong_map(
-            VirtAddr::from_raw(TRAMPOLINE_VADDR as u64),
-            PhysAddr::from_raw(trampoline as u64),
-            PTEFlags::valid().readable().executable(),
-            PageTableLevel::L2,
-        );
-
-        self.trapframe.sp = stack_pointer as usize;
-        self.trapframe.epc = program_counter as usize;
-        self.status.store(ProcStatus::Runnable, Ordering::Relaxed);
     }
 }
 
 impl ProcTable {
     pub fn new() -> Self {
-        ProcTable(core::array::from_fn(|i| {
-            Mutex::new(Process::new_inactive(i as ProcId))
-        }))
+        ProcTable(core::array::from_fn(|i| Process::new_inactive(i as ProcId)))
     }
 
     pub fn alloc_proc(&self, name: &'static str) -> Option<ProcId> {
         for proc in &self.0 {
-            if let Some(mut proc) = proc.try_lock() {
-                if proc.status.load(Ordering::SeqCst) == ProcStatus::Unused {
-                    proc.status.store(ProcStatus::Inactive, Ordering::SeqCst);
-                    proc.name = name;
-                    return Some(proc.id);
-                }
+            if proc
+                .status
+                .compare_exchange(
+                    ProcStatus::Unused,
+                    ProcStatus::Inactive,
+                    Ordering::SeqCst,
+                    Ordering::SeqCst,
+                )
+                .is_ok()
+            {
+                proc.name.replace(name);
+                return Some(proc.id);
             }
         }
         None
@@ -174,15 +214,11 @@ impl ProcTable {
 }
 
 impl core::ops::Index<ProcId> for ProcTable {
-    type Output = Mutex<Process<'static>>;
+    type Output = Process;
 
     fn index(&self, index: ProcId) -> &Self::Output {
         &self.0[index as usize]
     }
-}
-
-pub fn trapframe() -> &'static mut Trapframe {
-    unsafe { &mut *(TRAPFRAME_VADDR as *mut Trapframe) }
 }
 
 #[derive(Clone, Copy, Default, Debug)]
@@ -274,13 +310,5 @@ impl AtomicProcStatus {
                 failure,
             ))
         }
-    }
-}
-
-impl Deref for ProcTable {
-    type Target = [Mutex<Process<'static>>; NPROC];
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
     }
 }
