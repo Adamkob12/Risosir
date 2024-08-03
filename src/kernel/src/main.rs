@@ -31,11 +31,8 @@ extern "C" fn main() -> ! {
         STARTED.store(true, Ordering::SeqCst);
     } else {
         while !STARTED.load(Ordering::SeqCst) {
-            // wfi()
-            // Wait for CPU #0 to set up the kernel properly
+            wfi()
         }
-        // unsafe { mem::paging::set_current_page_table(addr_of!(KERNEL_PAGE_TABLE) as usize) };
-        // plic::init_plic_hart(hart_id);
     }
     if STARTED.load(Ordering::SeqCst) {
         cprintln!("Finished booting CPU #{}", hart_id);
