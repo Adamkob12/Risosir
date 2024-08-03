@@ -37,14 +37,18 @@ pub enum PageTableLevel {
     L0 = 0,
 }
 
+pub fn make_satp(pt_addr: usize) -> usize {
+    let sv39_mode: u64 = 8 << 60;
+    let pt_ppn = pt_addr as u64 >> 12;
+    (sv39_mode | pt_ppn) as usize
+}
+
 /// Updates the current page table in a safe way
 /// The given page table must be valid and safe to use
 pub unsafe fn set_current_page_table(pt: usize) {
-    let sv39_mode: u64 = 8 << 60;
-    let pt_ppn = pt as u64 >> 12;
-    satp::write((sv39_mode | pt_ppn) as usize);
     sfence_vma_all();
-    // loop {}
+    satp::write(make_satp(pt) as usize);
+    sfence_vma_all();
 }
 
 /// Only call during bootup, from one thread only, call once

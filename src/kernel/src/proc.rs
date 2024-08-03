@@ -1,4 +1,6 @@
+use crate::arch::interrupts::s_without_interrupts;
 use crate::{
+    arch::registers::tp,
     elf_parse::ParsedExecutable,
     mem::{
         alloc_frame,
@@ -15,7 +17,11 @@ use core::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+const INACTIVE_PROC_NAME: &str = "X";
+
+pub static mut PROCS_ADDR: usize = 0;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[repr(usize)]
 pub enum ProcStatus {
     Unused = 0,
@@ -31,20 +37,18 @@ pub struct Process {
     /// The name of the process, inactive processes are named "X"
     name: Cell<&'static str>,
     /// Indexes [`ProcTable`]
-    id: ProcId,
+    pub id: ProcId,
     /// The status of the process
-    status: AtomicProcStatus,
+    pub status: AtomicProcStatus,
     /// After [`init_procs`] is called, must be valid.
-    page_table: *mut PageTable,
+    pub kernel_stack: *mut [u8; STACK_SIZE],
     /// After [`init_procs`] is called, must be valid.
-    trapframe: *mut Trapframe,
+    pub page_table: *mut PageTable,
+    /// After [`init_procs`] is called, must be valid.
+    pub trapframe: *mut Trapframe,
 }
 
-const INACTIVE_PROC_NAME: &str = "X";
-
 pub struct ProcTable([Process; NPROC]);
-
-pub static mut PROCS_ADDR: usize = 0;
 
 pub fn init_procs() {
     let procs = Box::leak::<'static>(Box::new(ProcTable(core::array::from_fn(|idx| {
@@ -61,17 +65,27 @@ pub fn proc<'a>(id: ProcId) -> &'a Process {
     &procs()[id]
 }
 
+pub fn cpuid() -> usize {
+    s_without_interrupts(|| tp::read())
+}
+
 impl Process {
     fn new_inactive(id: ProcId) -> Self {
         let pt: &mut PageTable = Box::leak(unsafe { Box::new_zeroed().assume_init() });
         let tf: &mut Trapframe = Box::leak(unsafe { Box::new_zeroed().assume_init() });
+        let ks: &mut [u8; STACK_SIZE] = Box::leak(unsafe { Box::new_zeroed().assume_init() });
         Process {
             name: Cell::new(INACTIVE_PROC_NAME),
             id,
             status: AtomicProcStatus::new(ProcStatus::Unused),
-            page_table: pt as *mut PageTable,
-            trapframe: tf as *mut Trapframe,
+            page_table: pt as *mut _,
+            trapframe: tf as *mut _,
+            kernel_stack: ks as *mut _,
         }
+    }
+
+    pub fn name(&self) -> &str {
+        self.name.get()
     }
 
     pub fn pagetable<'a>(&'a self) -> &'a PageTable {
@@ -84,6 +98,7 @@ impl Process {
             .expect("init_procs wasn't called before trying to access the process")
     }
 
+    /// After calling this function, the process will be ready to run
     pub fn activate<'a>(&self, exe: ParsedExecutable<'a>) {
         if self
             .status
@@ -221,6 +236,7 @@ impl core::ops::Index<ProcId> for ProcTable {
     }
 }
 
+/// The saved values of the registers while executing in user mode.
 #[derive(Clone, Copy, Default, Debug)]
 #[repr(C, align(4096))]
 pub struct Trapframe {

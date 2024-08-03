@@ -1,25 +1,76 @@
 pub mod exception;
 pub mod interrupt;
 
+use crate::arch::interrupts::*;
+use crate::arch::registers::tp;
+use crate::cpu::cproc;
+use crate::mem::paging::make_satp;
+use crate::memlayout::TRAMPOLINE_VADDR;
+use crate::param::STACK_SIZE;
+use crate::proc::ProcStatus;
+use crate::trampoline::trampoline;
 use crate::{
-    arch::registers::*,
     memlayout::{UART_IRQ, VIRTIO0_IRQ},
     plic::{plic_claim, plic_complete},
+    proc::cpuid,
     uart::uart_interrupt,
     virtio::virtio_intr,
 };
 use core::arch::asm;
+use core::sync::atomic::Ordering;
 pub use exception::*;
 pub use interrupt::*;
+use riscv::register::{satp, sepc, sstatus, stvec};
 use riscv::register::{
     scause::{self, Interrupt},
     stval,
 };
 
+extern "C" {
+    fn uservec() -> !;
+    fn userret(satp: usize) -> !;
+}
+
+/// The first function that should be executed when a new process in created.
+/// This function should be called while still in s-mode, and with the kernel page table.
+pub fn user_proc_entry() {
+    user_trap_return();
+}
+
+fn user_trap_return() -> ! {
+    s_disable();
+    let proc = cproc();
+
+    #[cfg(debug_assertions)]
+    assert_eq!(proc.status.load(Ordering::SeqCst), ProcStatus::Running);
+
+    // SAFETY: if the process is running, the trapframe of the process can only be accessed by the CPU that's running the process.
+    let tf = &mut unsafe { *proc.trapframe };
+    tf.kernel_satp = satp::read().bits();
+    tf.kernel_hartid = tp::read();
+    tf.kernel_sp = proc.kernel_stack as usize + STACK_SIZE;
+    tf.kernel_trap = usertrap as usize;
+
+    unsafe {
+        sstatus::set_spp(sstatus::SPP::User);
+        sstatus::set_spie();
+        sepc::write(tf.epc);
+        stvec::write(
+            TRAMPOLINE_VADDR + (uservec as usize - trampoline as usize),
+            stvec::TrapMode::Direct,
+        );
+
+        userret(make_satp(proc.page_table as usize))
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn usertrap() {}
+
 #[no_mangle]
 pub unsafe extern "C" fn kerneltrap() {
     let scause = scause::read();
-    let hart_id = tp::read();
+    let hart_id = cpuid();
 
     match scause.cause() {
         scause::Trap::Interrupt(int) => match int {

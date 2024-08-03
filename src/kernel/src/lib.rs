@@ -45,9 +45,10 @@ extern crate alloc;
 
 pub mod arch;
 pub mod console;
+pub mod cpu;
 pub mod elf_parse;
 pub mod entry;
-pub mod fs;
+pub mod files;
 pub mod kernelvec;
 pub mod keyboard;
 pub mod mem;

@@ -6,24 +6,29 @@
 
 extern crate alloc;
 
-use crate::fs::FILES;
+use crate::files::FILES;
 use arch::asm::wfi;
 use arch::interrupts::s_enable;
-use arch::registers::stvec;
-use arch::registers::tp;
+use arch::registers::{ra, sp, stvec};
+use core::arch::asm;
 use core::ptr::addr_of;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::*;
+use cpu::ccpu;
+use elf_parse::parse_executable_file;
 use kernel::mem::paging::KERNEL_PAGE_TABLE;
 use kernel::trampoline::trampoline;
 use kernel::*;
 use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
+use param::{ProcId, NPROC, STACK_SIZE};
+use proc::{cpuid, proc, procs};
+use trap::user_proc_entry;
 
 static STARTED: AtomicBool = AtomicBool::new(false);
 
 #[export_name = "main"]
 extern "C" fn main() -> ! {
-    let hart_id = tp::read();
+    let hart_id = cpuid();
     cprintln!("Started booting CPU #{}", hart_id);
     if hart_id == 0 {
         unsafe { init_kernel() };
@@ -42,10 +47,35 @@ extern "C" fn main() -> ! {
 
     unsafe { s_enable() };
     if hart_id == 0 {
-        // let _ = FILES.lock().copy_to_ram("ls").unwrap();
+        let data = FILES.lock().copy_to_ram("test").unwrap();
+        let pid = procs().alloc_proc("test").unwrap();
+        let exe = parse_executable_file(&data).unwrap();
+        proc(pid).activate(exe);
     }
 
     loop {
+        for proc_id in 0..NPROC {
+            let proc = proc(proc_id as ProcId);
+            if proc
+                .status
+                .compare_exchange(
+                    proc::ProcStatus::Runnable,
+                    proc::ProcStatus::Running,
+                    Ordering::SeqCst,
+                    Ordering::SeqCst,
+                )
+                .is_ok()
+            {
+                cprintln!("Running Proc {}: {}", proc_id, proc.name());
+                ccpu().current_proc = proc.id;
+                unsafe {
+                    ra::write(user_proc_entry as usize);
+                    sp::write(proc.kernel_stack as usize + STACK_SIZE);
+                    asm!("ret");
+                }
+            }
+        }
+
         wfi();
     }
 }
@@ -68,5 +98,5 @@ unsafe fn init_kernel() {
     plic::init_plic_global();
     plic::init_plic_hart(0);
     virtio::init_virtio();
-    fs::init_files();
+    files::init_files();
 }

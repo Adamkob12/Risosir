@@ -84,7 +84,7 @@ pub unsafe extern "C" fn trampoline() -> ! {
     #[naked]
     #[no_mangle]
     #[repr(align(16))]
-    pub unsafe extern "C" fn userret(pagetable: usize) -> ! {
+    pub unsafe extern "C" fn userret(satp: usize) -> ! {
         asm!(
             // switch to the user page table.
             "sfence.vma zero, zero",

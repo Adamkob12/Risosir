@@ -88,7 +88,7 @@ impl Uart {
         unsafe {
             while let Some(char) = console.read_next() {
                 while (self.read_register::<LSR>() & LSR_THR_EMPTY_BIT) == 0 {}
-                self.write_to_register::<THR>(char as u8);
+                self.put_char(char as u8);
             }
         }
     }
@@ -97,12 +97,11 @@ impl Uart {
     /// then it returns and *only* continues after the uart interrupts and requests more data.
     pub fn async_send_pending(&mut self, console: &mut Console) {
         unsafe {
-            loop {
-                if (self.read_register::<LSR>() & LSR_THR_EMPTY_BIT) == 0 {
-                    return;
-                }
+            while (self.read_register::<LSR>() & LSR_THR_EMPTY_BIT) != 0 {
                 if let Some(char) = console.read_next() {
                     self.write_to_register::<THR>(char as u8);
+                } else {
+                    break;
                 }
             }
         }
@@ -110,20 +109,13 @@ impl Uart {
 }
 
 pub fn uart_interrupt() {
-    // cprint!("tp={}", tp::read());
     let mut console = CONSOLE.lock();
     let mut uart = UART.lock();
     // let mut kb = KEYBOARD.lock();
-    let _isr = unsafe { uart.read_register::<ISR>() };
-    {
-        while let Some(key) = unsafe { uart.get_next() } {
-            console
-                .write_char(ascii::Char::from_u8(key).unwrap())
-                .unwrap();
-            // if kb.update_new_press(key).is_err() {
-            //     break;
-            // }
-        }
+    while let Some(key) = unsafe { uart.get_next() } {
+        console
+            .write_char(ascii::Char::from_u8(key).unwrap())
+            .unwrap();
     }
-    uart.sync_send_pending(&mut *console);
+    uart.async_send_pending(&mut *console);
 }
