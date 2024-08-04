@@ -5,19 +5,11 @@ use core::{arch::asm, panic::PanicInfo};
 
 #[no_mangle]
 fn maine() {
-    hi();
-    unsafe { asm!("li s1, 69") };
-
-    loop {}
-}
-
-fn hi() {
-    unsafe { asm!("li s2, 69") };
-    bye();
-}
-
-fn bye() {
-    unsafe { asm!("li s3, 69") };
+    loop {
+        unsafe {
+            asm!("addi s1, s1, 1");
+        }
+    }
 }
 
 #[panic_handler]

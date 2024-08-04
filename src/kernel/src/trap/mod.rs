@@ -52,7 +52,6 @@ pub fn user_proc_entry() {
 
 fn user_trap_return() -> ! {
     s_disable();
-    // cprintln!("User trap return!");
     let proc = cproc();
 
     #[cfg(debug_assertions)]
@@ -102,15 +101,13 @@ fn device_interrupt(hart_id: usize) {
 
 #[no_mangle]
 pub unsafe extern "C" fn usertrap() {
-    cprintln!("USERTRAP");
     let scause = scause::read();
     let hart_id = cpuid();
-    // cprintln!("{}", cproc().trapframe().t1);
     match scause.cause() {
         scause::Trap::Interrupt(int) => match int {
             Interrupt::SupervisorExternal => device_interrupt(hart_id),
             Interrupt::SupervisorSoft => {
-                cprintln!("User Timer Int");
+                cprintln!("User Timer Int s1={}", cproc().trapframe().s1);
                 let sip: usize;
                 asm!("csrr {x}, sip", x = out(reg) sip);
                 asm!("csrw sip, {x}", x = in(reg) (sip & !2));
