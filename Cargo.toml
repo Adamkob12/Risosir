@@ -28,6 +28,7 @@ kernel = { workspace = true }
 
 [build-dependencies]
 fs = { path = "src/fs" }
+walkdir = "2"
 
 [features]
 test-kernel = ["kernel/test-kernel"]

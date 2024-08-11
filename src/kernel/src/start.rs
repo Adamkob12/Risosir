@@ -42,7 +42,7 @@ pub unsafe fn start() -> ! {
     // Delegate interrupts to S-Mode
     mideleg::set_sext();
     mideleg::set_ssoft();
-    mideleg::set_stimer();
+    // mideleg::set_stimer();
     // Allow S-mode External, Software & Timer interrupts
     sie::set_sext();
     sie::set_ssoft();

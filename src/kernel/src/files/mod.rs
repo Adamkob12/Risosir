@@ -77,8 +77,7 @@ impl FileTable {
             file_data[seg..(seg + FILE_DATA_SIZE)].copy_from_slice(&node.data);
             current_node_id = node.next_node;
         }
-        // let mut file_data = file_data_segs.into_flattened();
-        // let mut file_data = file_data_segs_a.into_flattened();
+        core::hint::black_box(&mut file_data);
         file_data.truncate(file_meta.size as usize);
         #[cfg(debug_assertions)]
         cprintln!(

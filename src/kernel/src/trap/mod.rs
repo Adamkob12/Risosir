@@ -2,15 +2,15 @@ pub mod exception;
 pub mod interrupt;
 
 use crate::arch::interrupts::*;
-use crate::arch::registers::{s3, tp};
+use crate::arch::registers::tp;
+use crate::cprintln;
 use crate::cpu::cproc;
 use crate::mem::paging::{make_satp, translate};
-use crate::mem::virtual_mem::{PTEFlags, PhysAddr, VirtAddr};
-use crate::memlayout::{TRAMPOLINE_VADDR, TRAPFRAME_VADDR};
+use crate::mem::virtual_mem::{PTEFlags, VirtAddr};
+use crate::memlayout::TRAMPOLINE_VADDR;
 use crate::param::STACK_SIZE;
 use crate::proc::ProcStatus;
 use crate::trampoline::trampoline;
-use crate::{cprint, cprintln};
 use crate::{
     memlayout::{UART_IRQ, VIRTIO0_IRQ},
     plic::{plic_claim, plic_complete},
@@ -36,6 +36,7 @@ extern "C" {
 /// The first function that should be executed when a new process in created.
 /// This function should be called while still in s-mode, and with the kernel page table.
 pub fn user_proc_entry() {
+    s_disable();
     let proc = cproc();
     cprintln!(
         "HHH: {:#x}",

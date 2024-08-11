@@ -2,7 +2,6 @@ use crate::memlayout::VIRTIO0;
 use alloc::boxed::Box;
 use conquer_once::spin::OnceCell;
 use core::{mem::MaybeUninit, sync::atomic::fence};
-use riscv::asm::wfi;
 use spin::Mutex;
 
 //
@@ -341,7 +340,7 @@ pub fn read_from_disk(sector: u64, data: &mut [u8; 1024]) -> Result<(), u8> {
 
     loop {
         match status {
-            0xff => wfi(),
+            0xff => continue,
             s => {
                 let mut disk = DISK.get().unwrap().lock();
                 disk.free_desc_chain(head_desc_chain);

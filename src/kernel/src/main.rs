@@ -20,9 +20,6 @@ use kernel::mem::paging::KERNEL_PAGE_TABLE;
 use kernel::trampoline::trampoline;
 use kernel::*;
 use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
-use mem::paging::{translate, Page};
-use mem::virtual_mem::{PTEFlags, VirtAddr};
-use memlayout::TRAPFRAME_VADDR;
 use param::{ProcId, NPROC, STACK_SIZE};
 use proc::{cpuid, proc, procs};
 use trap::user_proc_entry;
@@ -52,13 +49,12 @@ extern "C" fn main() -> ! {
     unsafe { s_enable() };
 
     if hart_id == 0 {
+        FILES.lock().cat("hi.txt");
         let data = FILES.lock().copy_to_ram("test").unwrap();
         cprintln!("JJJ: {:#p}", data.as_ptr());
         let pid = procs().alloc_proc("test").unwrap();
         let exe = parse_executable_file(&data).unwrap();
         proc(pid).activate(exe);
-
-        unsafe { s_enable() };
 
         loop {
             for proc_id in 0..NPROC {
@@ -115,5 +111,4 @@ unsafe fn init_kernel() {
     plic::init_plic_hart(0);
     virtio::init_virtio();
     files::init_files();
-    cprintln!("Finished booting CPU #{}", 0);
 }

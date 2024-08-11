@@ -2,20 +2,56 @@
 #![feature(ascii_char_variants)]
 #![feature(path_file_prefix)]
 
+use ::fs::*;
+use std::fs;
+use std::io::{self, Read};
+use std::path::Path;
 use std::{
     ascii,
     fs::{read_dir, File, OpenOptions},
-    io::{ErrorKind, Read, Seek, SeekFrom, Write},
-    path::Path,
+    io::{ErrorKind, Seek, SeekFrom, Write},
     slice,
 };
-
-use fs::*;
+use walkdir::WalkDir;
 
 const SHARED_FILES: &str = "shared_files";
+const ELF_SOURCE: &str = "target/riscv64gc-unknown-none-elf/debug";
+
+fn is_elf_file(file_path: &Path) -> io::Result<bool> {
+    let mut file = fs::File::open(file_path)?;
+    let mut buffer = [0u8; 4];
+    file.read_exact(&mut buffer)?;
+    Ok(&buffer == b"\x7fELF")
+}
+
+fn copy_elf_files(src_dir: &Path, dst_dir: &Path) -> io::Result<()> {
+    for entry in WalkDir::new(src_dir)
+        .max_depth(1)
+        .into_iter()
+        .filter_map(Result::ok)
+    {
+        let path = entry.path();
+
+        if path.is_file() && is_elf_file(path).unwrap_or(false) {
+            let relative_path = path.strip_prefix(src_dir).unwrap();
+            let dest_path = dst_dir.join(relative_path);
+
+            if let Some(parent) = dest_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+
+            fs::copy(path, &dest_path)?;
+            println!("Copied: {:?} to {:?}", path, dest_path);
+        }
+    }
+    Ok(())
+}
 
 fn main() {
     println!("cargo:rustc-link-arg-bin=risosir=--script=src/kernel/kernel.ld");
+
+    copy_elf_files(&Path::new(ELF_SOURCE), &Path::new(SHARED_FILES)).unwrap();
+
     let mut img = OpenOptions::new()
         .create(true)
         .read(true)
