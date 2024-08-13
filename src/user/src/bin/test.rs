@@ -5,12 +5,12 @@ use core::{arch::asm, panic::PanicInfo};
 
 #[no_mangle]
 fn maine() {
-    // let mut a = 1;
+    let mut a = 0;
     unsafe {
         asm!("ecall");
         loop {
-            // a += 1;
-            // asm!("mv s2, {x}", x = in(reg) a);
+            a += 100;
+            asm!("mv s2, {x}", x = in(reg) a);
             asm!("addi s1, s1, 1");
         }
     }

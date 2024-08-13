@@ -23,7 +23,7 @@ pub struct Frame([u8; PAGE_SIZE]);
 #[allow(dead_code)]
 pub struct Page([u8; PAGE_SIZE]);
 
-pub(super) const fn garbage_frame() -> Frame {
+pub const fn zerod_frame() -> Frame {
     Frame([0; PAGE_SIZE])
 }
 
@@ -288,7 +288,7 @@ pub fn translate(pt: &PageTable, va: VirtAddr, i: PageTableLevel, flags: PTEFlag
     let index = va.vpn(i);
     let pte = pt.0[index as usize];
     if !pte.is_valid() {
-        panic!("JJ");
+        panic!("Invalid, va: {:#x}", va.as_u64());
     }
     if !pte.is_readable() && pte.is_writable() {
         panic!("JJA");

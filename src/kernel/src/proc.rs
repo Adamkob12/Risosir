@@ -1,18 +1,21 @@
 use crate::{
     arch::registers::tp,
+    cprintln,
     elf_parse::ParsedExecutable,
     mem::{
         alloc_frame,
-        paging::{PageTable, PageTableLevel},
+        paging::{zerod_frame, PageTable, PageTableLevel},
         virtual_mem::{PTEFlags, PhysAddr, VirtAddr},
     },
     memlayout::{TRAMPOLINE_VADDR, TRAPFRAME_VADDR},
     param::{ProcId, HEAP_SIZE, HEAP_START, NPROC, PAGE_SIZE, STACK_SIZE},
+    scheduler::scheduler,
     trampoline::trampoline,
 };
 use alloc::boxed::Box;
 use core::{
     cell::Cell,
+    mem::zeroed,
     sync::atomic::{AtomicUsize, Ordering},
 };
 
@@ -98,6 +101,21 @@ impl Process {
             .expect("init_procs wasn't called before trying to access the process")
     }
 
+    pub fn exit(&self, exit_code: usize) {
+        cprintln!("Process {} exited with code {}", self.name(), exit_code);
+        self.name.replace(INACTIVE_PROC_NAME);
+        self.status
+            .compare_exchange(
+                ProcStatus::Running,
+                ProcStatus::Inactive,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            )
+            .unwrap();
+
+        scheduler(cpuid());
+    }
+
     /// After calling this function, the process will be ready to run
     pub fn activate<'a>(&self, exe: ParsedExecutable<'a>) {
         if self
@@ -112,6 +130,10 @@ impl Process {
         {
             let pt = unsafe { self.page_table.as_mut().unwrap() };
             let tf = unsafe { self.trapframe.as_mut().unwrap() };
+            let ks = unsafe { self.kernel_stack.as_mut().unwrap() };
+            *pt = unsafe { zeroed() };
+            *tf = unsafe { zeroed() };
+            ks.fill(0);
             // The program counter needs to start at the start of the code section
             let program_counter = exe.entry_point as u64;
             let file_base = exe.file_data.as_ptr() as usize;
@@ -157,13 +179,15 @@ impl Process {
             // stack and the data, so in case of a stack overflow, a stack overflow exception
             // will occur and no data will be corrupted.
             let stack_pointer = {
-                let stack_addr = data_end + (STACK_SIZE + PAGE_SIZE) as u64;
+                let stack_addr = 0x50000000 + data_end + PAGE_SIZE as u64;
                 for offset in (0..STACK_SIZE as u64).into_iter().step_by(PAGE_SIZE) {
-                    let frame_addr = unsafe { alloc_frame() }.unwrap().as_ptr() as u64;
+                    // let frame = unsafe { Box::<Page>::new_zeroed().assume_init() };
+                    let frame = Box::new(zerod_frame());
+                    let frame_addr = Box::into_raw(frame) as usize;
                     if let Some(_) = pt.strong_map(
                         VirtAddr::from_raw(stack_addr as u64 + offset),
-                        PhysAddr::from_raw(frame_addr),
-                        PTEFlags::valid().readable().writable(),
+                        PhysAddr::from_raw(frame_addr as u64),
+                        PTEFlags::valid().readable().writable().userable(),
                         PageTableLevel::L2,
                     ) {
                         panic!("Stack section overlaps with data segments");
@@ -179,7 +203,7 @@ impl Process {
                     if let Some(_) = pt.strong_map(
                         VirtAddr::from_raw(HEAP_START + offset as u64),
                         PhysAddr::from_raw(frame_addr),
-                        PTEFlags::valid().readable().writable(),
+                        PTEFlags::valid().readable().writable().userable(),
                         PageTableLevel::L2,
                     ) {
                         panic!("Heap section overlaps with data segments");

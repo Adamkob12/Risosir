@@ -8,21 +8,18 @@ extern crate alloc;
 
 use crate::files::FILES;
 use arch::asm::wfi;
-use arch::interrupts::{s_disable, s_enable};
-use arch::registers::{ra, sp, stvec};
-use core::arch::asm;
+use arch::interrupts::s_disable;
+use arch::registers::stvec;
 use core::ptr::addr_of;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::*;
-use cpu::ccpu;
 use elf_parse::parse_executable_file;
 use kernel::mem::paging::KERNEL_PAGE_TABLE;
 use kernel::trampoline::trampoline;
 use kernel::*;
 use kernel::{cprintln, end_of_kernel_code_section, end_of_kernel_data_section};
-use param::{ProcId, NPROC, STACK_SIZE};
 use proc::{cpuid, proc, procs};
-use trap::user_proc_entry;
+use scheduler::scheduler;
 
 static STARTED: AtomicBool = AtomicBool::new(false);
 
@@ -52,40 +49,6 @@ extern "C" fn main() -> ! {
     }
 }
 
-fn scheduler(_hart_id: usize) -> ! {
-    loop {
-        unsafe { s_enable() };
-        for proc_id in 0..NPROC {
-            let proc = proc(proc_id as ProcId);
-            // cprintln!("Found proc {}", proc.name());
-            if proc
-                .status
-                .compare_exchange(
-                    proc::ProcStatus::Runnable,
-                    proc::ProcStatus::Running,
-                    Ordering::SeqCst,
-                    Ordering::SeqCst,
-                )
-                .is_ok()
-            {
-                cprintln!(
-                    "CPU {} is Running Proc {}: {}",
-                    cpuid(),
-                    proc_id,
-                    proc.name()
-                );
-                ccpu().current_proc = proc.id;
-                unsafe {
-                    sp::write(proc.kernel_stack as usize + STACK_SIZE);
-                    ra::write(user_proc_entry as usize);
-                    asm!("ret");
-                }
-            }
-        }
-        wfi();
-    }
-}
-
 /// Will be called when the kernel is booting, only from CPU#0
 #[allow(unsafe_op_in_unsafe_fn)]
 unsafe fn init_kernel() {
@@ -106,8 +69,11 @@ unsafe fn init_kernel() {
     plic::init_plic_hart(0);
     virtio::init_virtio();
     files::init_files();
-    let data = FILES.lock().copy_to_ram("test").unwrap();
-    let pid = procs().alloc_proc("test").unwrap();
-    let exe = parse_executable_file(&data).unwrap();
-    proc(pid).activate(exe);
+
+    {
+        let data = FILES.lock().copy_to_ram("print").unwrap();
+        let pid = procs().alloc_proc("print").unwrap();
+        let exe = parse_executable_file(&data).unwrap();
+        proc(pid).activate(exe);
+    }
 }

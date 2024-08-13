@@ -10,6 +10,7 @@ use crate::mem::virtual_mem::{PTEFlags, VirtAddr};
 use crate::memlayout::TRAMPOLINE_VADDR;
 use crate::param::STACK_SIZE;
 use crate::proc::ProcStatus;
+use crate::syscall::syscall;
 use crate::trampoline::trampoline;
 use crate::{
     memlayout::{UART_IRQ, VIRTIO0_IRQ},
@@ -66,7 +67,6 @@ fn user_trap_return() -> ! {
     tf.kernel_hartid = tp::read();
     tf.kernel_sp = proc.kernel_stack as usize + STACK_SIZE;
     tf.kernel_trap = usertrap as usize;
-    tf.a4 = 0x69;
 
     unsafe {
         sstatus::set_spp(sstatus::SPP::User);
@@ -107,12 +107,16 @@ pub unsafe extern "C" fn usertrap() {
     let scause = scause::read();
     let hart_id = cpuid();
     stvec::write(kernelvec as usize, stvec::TrapMode::Direct);
-    unsafe { *cproc().trapframe }.epc = sepc::read();
+    unsafe { cproc().trapframe.as_mut().unwrap() }.epc = sepc::read();
     match scause.cause() {
         scause::Trap::Interrupt(int) => match int {
             Interrupt::SupervisorExternal => device_interrupt(hart_id),
             Interrupt::SupervisorSoft => {
-                cprintln!("User Timer Int s1={}", cproc().trapframe().s1);
+                cprintln!(
+                    "User Timer Int s1={}, s2={}",
+                    cproc().trapframe().s1,
+                    cproc().trapframe().s2
+                );
                 let sip: usize;
                 asm!("csrr {x}, sip", x = out(reg) sip);
                 asm!("csrw sip, {x}", x = in(reg) (sip & !2));
@@ -123,11 +127,11 @@ pub unsafe extern "C" fn usertrap() {
         },
         scause::Trap::Exception(excp) => match excp {
             Exception::UserEnvCall => {
-                cprintln!("ecall");
                 unsafe { cproc().trapframe.as_mut().unwrap() }.epc += 4;
+                syscall();
             }
             _ => panic!(
-                "Unexpected Exception in User Mode: \n\tScause={:#b}\n\tStval={}",
+                "Unexpected Exception in User Mode: \n\tScause={:#b}\n\tStval={:#x}",
                 scause.bits(),
                 stval::read(),
             ),
@@ -147,7 +151,6 @@ pub unsafe extern "C" fn kerneltrap() {
         scause::Trap::Interrupt(int) => match int {
             Interrupt::SupervisorExternal => device_interrupt(hart_id),
             Interrupt::SupervisorSoft => {
-                cprintln!("hai");
                 let sip: usize;
                 asm!("csrr {x}, sip", x = out(reg) sip);
                 asm!("csrw sip, {x}", x = in(reg) (sip & !2));

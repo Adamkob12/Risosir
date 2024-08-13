@@ -4,7 +4,7 @@ pub mod virtual_mem;
 use crate::{end_of_kernel_data_section, param::RAM_SIZE};
 use core::{alloc::Layout, ptr::NonNull};
 use linked_list_allocator::LockedHeap;
-use paging::{garbage_frame, Frame};
+use paging::{zerod_frame, Frame};
 
 #[cfg(not(feature = "debug-allocations"))]
 #[global_allocator]
@@ -38,7 +38,7 @@ pub unsafe fn alloc_frame_unwrap() -> NonNull<Frame> {
         .allocate_first_fit(Layout::new::<Frame>())
         .unwrap()
         .cast();
-    p.write(garbage_frame());
+    p.write(zerod_frame());
     p
 }
 
@@ -49,7 +49,7 @@ pub unsafe fn alloc_frame() -> Option<NonNull<Frame>> {
         .ok()
         .map(|p| {
             let p = p.cast();
-            p.write(garbage_frame());
+            p.write_volatile(zerod_frame());
             #[cfg(feature = "debug-allocations")]
             {
                 // crate::cprintln!("Allocated Frame at {:#x}", p.as_ptr() as usize);

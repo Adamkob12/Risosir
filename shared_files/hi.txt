@@ -1,5 +1,0 @@
-Hello!
-
-Does printing this file in the console work?
-
-<3
