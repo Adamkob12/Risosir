@@ -9,7 +9,7 @@ extern crate alloc;
 use crate::files::FILES;
 use arch::asm::wfi;
 use arch::interrupts::{s_disable, s_enable};
-use arch::registers::{ra, sp, sstatus, stvec};
+use arch::registers::{ra, sp, stvec};
 use core::arch::asm;
 use core::ptr::addr_of;
 use core::sync::atomic::AtomicBool;
@@ -104,6 +104,10 @@ unsafe fn init_kernel() {
     // Enable S-mode software, external and timer interrupts
     plic::init_plic_global();
     plic::init_plic_hart(0);
-    // virtio::init_virtio();
-    // files::init_files();
+    virtio::init_virtio();
+    files::init_files();
+    let data = FILES.lock().copy_to_ram("test").unwrap();
+    let pid = procs().alloc_proc("test").unwrap();
+    let exe = parse_executable_file(&data).unwrap();
+    proc(pid).activate(exe);
 }

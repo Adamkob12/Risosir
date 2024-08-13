@@ -40,7 +40,8 @@ pub fn user_proc_entry() {
     s_disable();
     let proc = cproc();
     cprintln!(
-        "HHH: {:#x}",
+        "Address for entry point for new process {} in Kernel Ram: {:#x}",
+        proc.name(),
         translate(
             &proc.pagetable(),
             VirtAddr::from_raw(0x1000),
@@ -75,7 +76,6 @@ fn user_trap_return() -> ! {
             TRAMPOLINE_VADDR + (uservec as usize - trampoline as usize),
             stvec::TrapMode::Direct,
         );
-        // cprintln!("{:#?}", proc.trapframe());
 
         let userret_addr = TRAMPOLINE_VADDR + (userret as usize - trampoline as usize);
         let userret_fn: extern "C" fn(usize) -> ! = core::mem::transmute(userret_addr);
@@ -124,7 +124,7 @@ pub unsafe extern "C" fn usertrap() {
         scause::Trap::Exception(excp) => match excp {
             Exception::UserEnvCall => {
                 cprintln!("ecall");
-                unsafe { *cproc().trapframe }.epc += 4;
+                unsafe { cproc().trapframe.as_mut().unwrap() }.epc += 4;
             }
             _ => panic!(
                 "Unexpected Exception in User Mode: \n\tScause={:#b}\n\tStval={}",

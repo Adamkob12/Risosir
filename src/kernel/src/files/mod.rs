@@ -1,6 +1,5 @@
 use crate::{cprint, cprintln, mem::paging::Page, param::PAGE_SIZE, virtio::read_from_disk};
-use aligned_vec::AVec;
-use alloc::{boxed::Box, vec::Vec};
+use alloc::boxed::Box;
 use core::{
     ascii,
     mem::{transmute, MaybeUninit},

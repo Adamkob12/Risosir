@@ -1,5 +1,3 @@
-use crate::arch::interrupts::s_without_interrupts;
-use crate::cprintln;
 use crate::{
     arch::registers::tp,
     elf_parse::ParsedExecutable,
