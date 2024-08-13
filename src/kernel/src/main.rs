@@ -8,8 +8,8 @@ extern crate alloc;
 
 use crate::files::FILES;
 use arch::asm::wfi;
-use arch::interrupts::s_enable;
-use arch::registers::{ra, sp, stvec};
+use arch::interrupts::{s_disable, s_enable};
+use arch::registers::{ra, sp, sstatus, stvec};
 use core::arch::asm;
 use core::ptr::addr_of;
 use core::sync::atomic::AtomicBool;
@@ -32,7 +32,6 @@ extern "C" fn main() -> ! {
     cprintln!("Started booting CPU #{}", hart_id);
     if hart_id == 0 {
         unsafe { init_kernel() };
-        cprintln!("Finished booting CPU #{}", hart_id);
         // The kernel has officially booted
         STARTED.store(true, Ordering::SeqCst);
     } else {
@@ -43,52 +42,47 @@ extern "C" fn main() -> ! {
         plic::init_plic_hart(hart_id);
         // Init kernel trap handler
         unsafe { stvec::write(trap::kernelvec as usize, stvec::TrapMode::Direct) };
-        cprintln!("Finished booting CPU #{}", hart_id);
     }
 
-    unsafe { s_enable() };
+    scheduler(hart_id);
 
-    if hart_id == 0 {
-        FILES.lock().cat("hi.txt");
-        let data = FILES.lock().copy_to_ram("test").unwrap();
-        cprintln!("JJJ: {:#p}", data.as_ptr());
-        let pid = procs().alloc_proc("test").unwrap();
-        let exe = parse_executable_file(&data).unwrap();
-        proc(pid).activate(exe);
+    #[allow(unreachable_code)]
+    {
+        unreachable!();
+    }
+}
 
-        loop {
-            for proc_id in 0..NPROC {
-                let proc = proc(proc_id as ProcId);
-                if proc
-                    .status
-                    .compare_exchange(
-                        proc::ProcStatus::Runnable,
-                        proc::ProcStatus::Running,
-                        Ordering::SeqCst,
-                        Ordering::SeqCst,
-                    )
-                    .is_ok()
-                {
-                    cprintln!(
-                        "CPU {} is Running Proc {}: {}",
-                        cpuid(),
-                        proc_id,
-                        proc.name()
-                    );
-                    ccpu().current_proc = proc.id;
-                    unsafe {
-                        sp::write(proc.kernel_stack as usize + STACK_SIZE);
-                        ra::write(user_proc_entry as usize);
-                        asm!("ret");
-                    }
+fn scheduler(_hart_id: usize) -> ! {
+    loop {
+        unsafe { s_enable() };
+        for proc_id in 0..NPROC {
+            let proc = proc(proc_id as ProcId);
+            // cprintln!("Found proc {}", proc.name());
+            if proc
+                .status
+                .compare_exchange(
+                    proc::ProcStatus::Runnable,
+                    proc::ProcStatus::Running,
+                    Ordering::SeqCst,
+                    Ordering::SeqCst,
+                )
+                .is_ok()
+            {
+                cprintln!(
+                    "CPU {} is Running Proc {}: {}",
+                    cpuid(),
+                    proc_id,
+                    proc.name()
+                );
+                ccpu().current_proc = proc.id;
+                unsafe {
+                    sp::write(proc.kernel_stack as usize + STACK_SIZE);
+                    ra::write(user_proc_entry as usize);
+                    asm!("ret");
                 }
             }
-            wfi();
         }
-    }
-
-    loop {
-        wfi()
+        wfi();
     }
 }
 
@@ -98,6 +92,7 @@ unsafe fn init_kernel() {
     cprintln!("End of kernel code : {:#x}", end_of_kernel_code_section());
     cprintln!("Trampoline frame   : {:#x}", trampoline as u64);
     cprintln!("End of kernel data : {:#x}", end_of_kernel_data_section());
+    s_disable();
     mem::init_kernel_allocator();
     mem::paging::init_kernel_page_table();
     mem::paging::set_current_page_table(addr_of!(KERNEL_PAGE_TABLE) as usize);
@@ -109,6 +104,6 @@ unsafe fn init_kernel() {
     // Enable S-mode software, external and timer interrupts
     plic::init_plic_global();
     plic::init_plic_hart(0);
-    virtio::init_virtio();
-    files::init_files();
+    // virtio::init_virtio();
+    // files::init_files();
 }

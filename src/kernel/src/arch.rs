@@ -36,7 +36,6 @@ pub mod _arch {
         pub use riscv::interrupt::supervisor::disable as s_disable;
         pub use riscv::interrupt::supervisor::enable as s_enable;
         pub use riscv::interrupt::supervisor::free as s_without_interrupts;
-        pub use riscv::interrupt::supervisor::nested as s_with_interrupts;
     }
     pub mod clint {
         pub mod mtime {

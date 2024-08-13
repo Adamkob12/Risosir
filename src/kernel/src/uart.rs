@@ -116,6 +116,9 @@ pub fn uart_interrupt() {
         console
             .write_char(ascii::Char::from_u8(key).unwrap())
             .unwrap();
+        console
+            .write_char(ascii::Char::from_u8(key).unwrap())
+            .unwrap();
     }
     uart.async_send_pending(&mut *console);
 }

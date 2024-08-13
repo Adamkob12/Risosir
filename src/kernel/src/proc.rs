@@ -67,7 +67,8 @@ pub fn proc<'a>(id: ProcId) -> &'a Process {
 }
 
 pub fn cpuid() -> usize {
-    s_without_interrupts(|| tp::read())
+    // s_without_interrupts(|| tp::read())
+    tp::read()
 }
 
 impl Process {

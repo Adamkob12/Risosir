@@ -7,6 +7,7 @@ use core::{arch::asm, panic::PanicInfo};
 fn maine() {
     // let mut a = 1;
     unsafe {
+        asm!("ecall");
         loop {
             // a += 1;
             // asm!("mv s2, {x}", x = in(reg) a);

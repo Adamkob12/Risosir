@@ -22,6 +22,7 @@ use core::arch::asm;
 use core::sync::atomic::Ordering;
 pub use exception::*;
 pub use interrupt::*;
+use riscv::register::scause::Exception;
 use riscv::register::{satp, sepc, sstatus, stvec};
 use riscv::register::{
     scause::{self, Interrupt},
@@ -87,6 +88,7 @@ fn device_interrupt(hart_id: usize) {
     if let Some(plic_irq) = plic_claim(hart_id) {
         match plic_irq {
             VIRTIO0_IRQ => {
+                cprintln!("virtio");
                 virtio_intr();
             }
             UART_IRQ => {
@@ -104,6 +106,8 @@ fn device_interrupt(hart_id: usize) {
 pub unsafe extern "C" fn usertrap() {
     let scause = scause::read();
     let hart_id = cpuid();
+    stvec::write(kernelvec as usize, stvec::TrapMode::Direct);
+    unsafe { *cproc().trapframe }.epc = sepc::read();
     match scause.cause() {
         scause::Trap::Interrupt(int) => match int {
             Interrupt::SupervisorExternal => device_interrupt(hart_id),
@@ -118,6 +122,10 @@ pub unsafe extern "C" fn usertrap() {
             }
         },
         scause::Trap::Exception(excp) => match excp {
+            Exception::UserEnvCall => {
+                cprintln!("ecall");
+                unsafe { *cproc().trapframe }.epc += 4;
+            }
             _ => panic!(
                 "Unexpected Exception in User Mode: \n\tScause={:#b}\n\tStval={}",
                 scause.bits(),
@@ -132,13 +140,14 @@ pub unsafe extern "C" fn usertrap() {
 #[no_mangle]
 pub unsafe extern "C" fn kerneltrap() {
     let scause = scause::read();
-    let hart_id = cpuid();
+    let hart_id = 0;
+    let sepc = sepc::read();
 
     match scause.cause() {
         scause::Trap::Interrupt(int) => match int {
             Interrupt::SupervisorExternal => device_interrupt(hart_id),
             Interrupt::SupervisorSoft => {
-                cprintln!("Kernel Timer Int");
+                cprintln!("hai");
                 let sip: usize;
                 asm!("csrr {x}, sip", x = out(reg) sip);
                 asm!("csrw sip, {x}", x = in(reg) (sip & !2));
@@ -155,6 +164,8 @@ pub unsafe extern "C" fn kerneltrap() {
             ),
         },
     }
+
+    sepc::write(sepc);
 }
 
 #[repr(align(16))]
