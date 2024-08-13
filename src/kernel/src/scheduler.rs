@@ -26,10 +26,10 @@ pub fn scheduler(_hart_id: usize) -> ! {
                 .is_ok()
             {
                 cprintln!(
-                    "CPU {} is Running Proc {}: {}",
+                    "CPU {} is running proc `{}` (id={})",
                     cpuid(),
+                    proc.name(),
                     proc_id,
-                    proc.name()
                 );
                 ccpu().current_proc = proc.id;
                 unsafe {

@@ -41,8 +41,9 @@ pub fn user_proc_entry() {
     s_disable();
     let proc = cproc();
     cprintln!(
-        "Address for entry point for new process {} in Kernel Ram: {:#x}",
+        "Address for entry point for new process `{}` (id={}) in Kernel Ram: {:#x}",
         proc.name(),
+        proc.id,
         translate(
             &proc.pagetable(),
             VirtAddr::from_raw(0x1000),
@@ -88,7 +89,6 @@ fn device_interrupt(hart_id: usize) {
     if let Some(plic_irq) = plic_claim(hart_id) {
         match plic_irq {
             VIRTIO0_IRQ => {
-                cprintln!("virtio");
                 virtio_intr();
             }
             UART_IRQ => {
@@ -112,11 +112,6 @@ pub unsafe extern "C" fn usertrap() {
         scause::Trap::Interrupt(int) => match int {
             Interrupt::SupervisorExternal => device_interrupt(hart_id),
             Interrupt::SupervisorSoft => {
-                cprintln!(
-                    "User Timer Int s1={}, s2={}",
-                    cproc().trapframe().s1,
-                    cproc().trapframe().s2
-                );
                 let sip: usize;
                 asm!("csrr {x}, sip", x = out(reg) sip);
                 asm!("csrw sip, {x}", x = in(reg) (sip & !2));

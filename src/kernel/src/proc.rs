@@ -102,7 +102,12 @@ impl Process {
     }
 
     pub fn exit(&self, exit_code: usize) {
-        cprintln!("Process {} exited with code {}", self.name(), exit_code);
+        cprintln!(
+            "Process `{}` (id={}) exited with code {}",
+            self.name(),
+            self.id,
+            exit_code
+        );
         self.name.replace(INACTIVE_PROC_NAME);
         self.status
             .compare_exchange(
