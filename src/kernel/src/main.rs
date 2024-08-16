@@ -37,7 +37,6 @@ extern "C" fn main() -> ! {
         }
         unsafe { mem::paging::set_current_page_table(addr_of!(KERNEL_PAGE_TABLE) as usize) };
         plic::init_plic_hart(hart_id);
-        // Init kernel trap handler
         unsafe { stvec::write(trap::kernelvec as usize, stvec::TrapMode::Direct) };
     }
 
@@ -70,10 +69,15 @@ unsafe fn init_kernel() {
     virtio::init_virtio();
     files::init_files();
 
-    {
-        let data = FILES.lock().copy_to_ram("print").unwrap();
+    let data = FILES.lock().copy_to_ram("print").unwrap();
+    let exe = parse_executable_file(&data).unwrap();
+    for _ in 0..30 {
         let pid = procs().alloc_proc("print").unwrap();
-        let exe = parse_executable_file(&data).unwrap();
-        proc(pid).activate(exe);
+        proc(pid).activate(&exe);
     }
+
+    // let data1 = FILES.lock().copy_to_ram("print").unwrap();
+    // let pid1 = procs().alloc_proc("print1").unwrap();
+    // let exe1 = parse_executable_file(&data1).unwrap();
+    // proc(pid1).activate(exe1);
 }

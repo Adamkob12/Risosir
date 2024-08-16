@@ -14,7 +14,6 @@ pub fn scheduler(_hart_id: usize) -> ! {
         unsafe { s_enable() };
         for proc_id in 0..NPROC {
             let proc = proc(proc_id as ProcId);
-            // cprintln!("Found proc {}", proc.name());
             if proc
                 .status
                 .compare_exchange(
@@ -33,7 +32,7 @@ pub fn scheduler(_hart_id: usize) -> ! {
                 );
                 ccpu().current_proc = proc.id;
                 unsafe {
-                    sp::write(proc.kernel_stack as usize + STACK_SIZE);
+                    // sp::write(proc.kernel_stack as usize + STACK_SIZE);
                     ra::write(user_proc_entry as usize);
                     asm!("ret");
                 }

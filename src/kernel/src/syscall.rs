@@ -3,7 +3,7 @@ use core::{mem::transmute, slice, str};
 use fs::FileId;
 
 use crate::{
-    cprint, cprintln,
+    cprint,
     cpu::cproc,
     mem::{
         paging::{translate, PageTableLevel},
@@ -34,13 +34,12 @@ pub unsafe fn syscall() {
                 PageTableLevel::L2,
                 PTEFlags::valid().readable().userable(),
             );
-            let len = a1;
-            #[cfg(debug_assertions)]
-            cprintln!(
-                "executing print syscall | addr={:#x}, len={}",
-                addr.as_u64(),
-                len
-            );
+            // #[cfg(debug_assertions)]
+            // cprintln!(
+            //     "executing print syscall | addr={:#x}, len={}",
+            //     addr.as_u64(),
+            //     a1
+            // );
             print_syscall(str::from_raw_parts(addr.as_u64() as *const u8, a1));
         }
         EXIT_SYSCALL => {

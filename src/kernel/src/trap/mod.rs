@@ -45,10 +45,14 @@ pub fn user_proc_entry() {
         proc.name(),
         proc.id,
         translate(
-            &proc.pagetable(),
+            proc.pagetable(),
             VirtAddr::from_raw(0x1000),
             crate::mem::paging::PageTableLevel::L2,
-            PTEFlags::valid().executable().readable().writable(),
+            PTEFlags::valid()
+                .executable()
+                .readable()
+                .writable()
+                .userable(),
         )
         .as_u64()
     );
@@ -125,11 +129,14 @@ pub unsafe extern "C" fn usertrap() {
                 unsafe { cproc().trapframe.as_mut().unwrap() }.epc += 4;
                 syscall();
             }
-            _ => panic!(
-                "Unexpected Exception in User Mode: \n\tScause={:#b}\n\tStval={:#x}",
-                scause.bits(),
-                stval::read(),
-            ),
+            _ => {
+                cprintln!(
+                    "Unexpected Exception in User Mode: \n\tScause={:#b}\n\tStval={:#x}",
+                    scause.bits(),
+                    stval::read(),
+                );
+                cproc().exit(scause.bits())
+            }
         },
     }
 

@@ -112,7 +112,7 @@ impl Process {
         self.status
             .compare_exchange(
                 ProcStatus::Running,
-                ProcStatus::Inactive,
+                ProcStatus::Unused,
                 Ordering::SeqCst,
                 Ordering::SeqCst,
             )
@@ -122,7 +122,7 @@ impl Process {
     }
 
     /// After calling this function, the process will be ready to run
-    pub fn activate<'a>(&self, exe: ParsedExecutable<'a>) {
+    pub fn activate<'a>(&self, exe: &ParsedExecutable<'a>) {
         if self
             .status
             .compare_exchange(
@@ -145,7 +145,6 @@ impl Process {
             let mut data_end = 0;
             // Map the text section (code of the process), it needs to be readable and executable
             for seg in exe.segs {
-                // cprintln!("{:#?}", seg);
                 let flags = PTEFlags::valid()
                     .readable()
                     .writable()
@@ -202,19 +201,19 @@ impl Process {
             };
 
             // Allocate and map the heap
-            {
-                for offset in (0..HEAP_SIZE).into_iter().step_by(PAGE_SIZE) {
-                    let frame_addr = unsafe { alloc_frame() }.unwrap().as_ptr() as u64;
-                    if let Some(_) = pt.strong_map(
-                        VirtAddr::from_raw(HEAP_START + offset as u64),
-                        PhysAddr::from_raw(frame_addr),
-                        PTEFlags::valid().readable().writable().userable(),
-                        PageTableLevel::L2,
-                    ) {
-                        panic!("Heap section overlaps with data segments");
-                    }
-                }
-            }
+            // {
+            //     for offset in (0..HEAP_SIZE).into_iter().step_by(PAGE_SIZE) {
+            //         let frame_addr = unsafe { alloc_frame() }.unwrap().as_ptr() as u64;
+            //         if let Some(_) = pt.strong_map(
+            //             VirtAddr::from_raw(HEAP_START + offset as u64),
+            //             PhysAddr::from_raw(frame_addr),
+            //             PTEFlags::valid().readable().writable().userable(),
+            //             PageTableLevel::L2,
+            //         ) {
+            //             panic!("Heap section overlaps with data segments");
+            //         }
+            //     }
+            // }
 
             // map the trapframe
             pt.strong_map(

@@ -2,7 +2,7 @@ use crate::{cprint, cprintln, mem::paging::Page, param::PAGE_SIZE, virtio::read_
 use alloc::boxed::Box;
 use core::{
     ascii,
-    mem::{transmute, MaybeUninit},
+    mem::{transmute, ManuallyDrop, MaybeUninit},
 };
 pub use fs::*;
 use spin::Mutex;
@@ -53,7 +53,7 @@ impl FileTable {
 
     /// Copy the entire file data to ram, returning a slice of contigous Physical
     /// Frames that contain the file data.
-    pub fn copy_to_ram(&self, file_name: &str) -> Option<Box<[u8]>> {
+    pub fn copy_to_ram(&self, file_name: &str) -> Option<ManuallyDrop<Box<[u8]>>> {
         let file_meta = self.get_file_meta(file_name)?;
         let pages = file_meta.size as usize / PAGE_SIZE + 2;
         let file_frames: Box<[Page]> = unsafe { Box::new_zeroed_slice(pages).assume_init() };
@@ -67,12 +67,12 @@ impl FileTable {
         {
             let mut node: Node = unsafe { core::mem::transmute([0u8; 1024]) };
             read_node(&mut node, current_node_id);
-            #[cfg(debug_assertions)]
-            cprintln!(
-                "Read Node {}. Next Node: {}",
-                current_node_id,
-                node.next_node
-            );
+            // #[cfg(debug_assertions)]
+            // cprintln!(
+            //     "Read Node {}. Next Node: {}",
+            //     current_node_id,
+            //     node.next_node
+            // );
             file_data[seg..(seg + FILE_DATA_SIZE)].copy_from_slice(&node.data);
             current_node_id = node.next_node;
         }
@@ -84,7 +84,7 @@ impl FileTable {
             file_name,
             file_data.as_ptr() as usize
         );
-        Some(file_data.into_boxed_slice())
+        Some(ManuallyDrop::new(file_data.into_boxed_slice()))
     }
 
     pub fn debug_file(&self, file_name: &str) {
@@ -93,7 +93,7 @@ impl FileTable {
 
     pub fn cat(&self, file_name: &str) {
         let file_data = self.copy_to_ram(file_name).unwrap();
-        for chr in &file_data {
+        for chr in &*file_data {
             cprint!(
                 "{}",
                 ascii::Char::from_u8(*chr).unwrap_or(ascii::Char::QuestionMark)
